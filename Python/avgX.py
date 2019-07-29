@@ -651,12 +651,6 @@ else:
     
 if rank == 0:
 
-    threep_avg = np.average( threep_jk, axis=-2 )
-    threep_err = fncs.calcError( threep_jk, binNum_glob, axis=-2 )
-
-    twop_boost_avg = np.average( twop_boost_jk, axis=-2 )
-    twop_boost_err = fncs.calcError( twop_boost_jk, binNum_glob, axis=-2 )
-    
     # avgX[ mom, flav, ts, b, t ]
 
     # Loop over momenta
@@ -714,7 +708,7 @@ if rank == 0:
             for iflav in range( flavNum ):
 
                 # Write <x> output files
-
+                """
                 threep_outFilename = output_template.replace( "*", "threep_" \
                                                             + flav_str[ iflav ] \
                                                             + "_tsink" \
@@ -729,7 +723,7 @@ if rank == 0:
                 rw.writeAvgDataFile( threep_outFilename, threep_avg[ imom, iflav, its ], \
                                      threep_err[ imom,iflav, its ] )
 
-
+                """
                 avgX_avgRatio_outFilename = output_template.replace( "*", "avgX_avgRatio_" \
                                                                      + flav_str[ iflav ] \
                                                                      + "_tsink" \
@@ -864,11 +858,11 @@ if rank == 0:
                 # End loop over fit ranges
             # End loop over flavor
         # End loop over tsink
-
+        """
         twop_outFilename = output_template.replace( "*", "twop_" \
                                                     + flav_str[ iflav ] \
                                                     + "_tsink" \
-                                                    + str( ts ) + "_" \
+                                                    + "_" \
                                                     + fncs.signToString( momList[ imom ][0] ) \
                                                     + str(momList[ imom ][0]) + "_" \
                                                     + fncs.signToString( momList[ imom ][1] ) \
@@ -878,7 +872,7 @@ if rank == 0:
 
         rw.writeAvgDataFile( twop_outFilename, twop_boost_avg[ imom ], \
                              twop_boost_err[ imom ] )
-       
+        """
     # End loop over momenta
 
     avgX_avgTwopThreep = np.zeros( ( flavNum, \
@@ -913,6 +907,12 @@ if rank == 0:
     avgX_avgTwopThreep_avg = np.average( avgX_avgTwopThreep, axis=-2 )
     avgX_avgTwopThreep_err = fncs.calcError( avgX_avgTwopThreep, binNum_glob, axis=-2 )
 
+    threep_avg = np.average( threep_jk, axis=-2 )
+    threep_err = fncs.calcError( threep_jk, binNum_glob, axis=-2 )
+
+    twop_boost_avg = np.average( twop_boost_jk, axis=-2 )
+    twop_boost_err = fncs.calcError( twop_boost_jk, binNum_glob, axis=-2 )
+    
     # Loop over tsink
     for ts, its in zip( tsink, range( tsinkNum ) ) :
         # Loop over flavor
@@ -1008,15 +1008,15 @@ if rank == 0:
                                      fitEnd[ irange ] )
 
                 avgX_avgTwopThreep_fit_outFilename=output_template.replace("*", \
-                                                             "avgX_avgTwopThreep_" \
-                                                             + flav_str[iflav]\
-                                                             + "_fit_" \
-                                                             "tsink" \
-                                                             + str( ts ) \
-                                                             + "_" \
-                                                             + str(fitStart[irange]) \
-                                                             + "_" \
-                                                             + str(fitEnd[irange]))
+                                                                           "avgX_avgTwopThreep_" \
+                                                                           + flav_str[iflav]\
+                                                                           + "_fit_" \
+                                                                           "tsink" \
+                                                                           + str( ts ) \
+                                                                           + "_" \
+                                                                           + str(fitStart[irange]) \
+                                                                           + "_" \
+                                                                           + str(fitEnd[irange]))
                 rw.writeFitDataFile( avgX_avgTwopThreep_fit_outFilename, \
                                      avgX_avgTwopThreep_fit_avg, \
                                      avgX_avgTwopThreep_fit_err, \
@@ -1026,6 +1026,9 @@ if rank == 0:
             # End loop over fit ranges
         # End loop over flavor
     # End loop over tsink
+    twop_outFilename = output_template.replace( "*", "twop" )
+    rw.writeAvgDataFile( twop_outFilename, twop_boost_avg, \
+                         twop_boost_err )
 
 # End if first process
 
