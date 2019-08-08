@@ -352,6 +352,48 @@ def getHDF5File_wNames( configDir, configList, fn_template, \
     return dataset, datasetName
 
 
+def readAndProcessQList( QFile, threepDir, configList, \
+                         threep_template, dataFormat ):
+ 
+    if QFile:
+
+        Q = rw.readTxtFile( args.momentum_transfer_list, dtype=int )
+
+        if dataFormat == "ASCII":
+        
+            Q = -1.0 * Q
+
+    else:
+
+        if dataFormat == "gpu":
+
+            mpi_fncs.mpiPrint( "No momentum list given, will read momentum " \
+                               + "from three-point function files", rank )
+            
+            Q = rw.getDatasets( threepDir, configList, threep_template, \
+                                "Momenta_list" )[ :, 0, 0, ... ]
+
+        elif dataFormat == "cpu":
+
+            Q = rw.getDatasets( threepDir, configList, threep_template, \
+                                "mvec" )
+
+            print(Q.shape)
+            print(Q)
+
+            exit()
+            # CJL: HERE
+
+        elif dataFormat == "ASCII":
+
+            mpi_fncs.mpiPrintError( "ERROR: ASCII format requires a " \
+                                    + "momentum list to be given.", comm )
+
+    Qsq, Qsq_start, Qsq_end = fncs.processMomList( Q )
+
+    return Q, Qsq, Qsq_start, Qsq_end
+
+
 # Get the real part of gxDx, gyDy, gzDz, and gtDt
 # three-point functions at zero-momentum
 

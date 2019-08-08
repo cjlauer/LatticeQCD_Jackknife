@@ -14,6 +14,10 @@ def dataFormatList():
 
     return [ "cpu", "gpu", "ASCII" ]
 
+def formFactorList():
+
+    return [ "EM", "1D" ]
+
 # Calculates the jackknife error from the standard deviation.
 # Can be given any keyword arguments accepted by numpy.std(),
 # otherwise, calculates the error along the first axis.
