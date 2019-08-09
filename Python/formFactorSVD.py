@@ -103,7 +103,6 @@ twop_template = args.twop_template
 
 # First and last points to fit ratios
 
-rangeStart_mEff = args.mEff_fit_range_start
 rangeEnd_mEff = args.mEff_fit_range_end
 
 # First and last points to fit ratios
@@ -123,6 +122,8 @@ ts_range_str = "tsink" + str(tsink[0]) + "_" + str(tsink[-1])
 
 # Other info
 
+L = args.L
+
 binSize = args.binSize
 
 output_template = args.output_template
@@ -136,101 +137,6 @@ momSq = args.threep_final_momentum_squared
 
 configList = np.array( fncs.getConfigList( args.config_list, threepDir ) )
 configNum = len( configList )
-
-# Check inputs
-
-assert particle in particle_list, \
-    "Error: Particle not supported. " \
-    + "Supported particles: " + str( particle_list )
-
-assert dataFormat in format_list, \
-    "Error: Data format not supported. " \
-    + "Supported particles: " + str( format_list )
-
-assert formFactor in form_factor_list, \
-    "Error: Form factor not supported. " \
-    + "Supported form factors: " + str( form_factor_list )
-
-assert configNum % binSize == 0, "Number of configurations " \
-    + str( configNum ) + " not evenly divided by bin size " \
-    + str( binSize ) + "."
-
-assert configNum % procNum == 0, "Number of configurations " \
-    + str( configNum ) + " not evenly divided by number of processes " \
-    + str( procNum ) + "."
-
-if particle == "pion":
-
-    projector = [ "" ]
-
-    flavNum = 1
-    flav_str = [ "u" ]
-
-    if formFactor == "1D":
-
-        ratioNum = 7
-
-    else:
-
-        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
-                              + particle, comm )
-
-elif particle == "kaon":
-
-    projector = [ "" ]
-
-    flavNum = 2
-    flav_str = [ "u", "s" ]
-
-    ratioNum = 10
-
-    if formFactor == "1D":
-
-        ratioNum = 7
-
-    else:
-
-        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
-                              + particle, comm )
-
-elif particle == "nucleon":
-
-    projector = [ "0", "4", "5", "6" ]
-
-    flavNum = 2
-    flav_str = [ "IV", "IS" ]
-
-    if formFactor == "EM":
-
-        ratioNum = 10
-
-    else:
-
-        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
-                              + particle, comm )
-
-projNum = len( projector )
-
-if formFactor == "EM":
-
-    Z = 1.0
-
-elif formFactor == "1D":
-
-    Z = 1.123
-
-# Momentum list
-
-Q, Qsq, \
-    Qsq_start, \
-    Qsq_end = rw.readAndProcessQList( args.momentum_transfer_list, \
-                                      threepDir, configList, \
-                                      threep_template, \
-                                      dataFormat )
-
-QNum = len( Q )
-
-QsqNum = len( Qsq )
 
 # Number of configurations on each process
 
@@ -270,7 +176,89 @@ binNum_loc = binNum[ rank ]
 
 recvCount, recvOffset = mpi_fncs.recvCountOffset( procNum, binNum )
 
-# Read momentum list
+# Check inputs
+
+assert particle in particle_list, \
+    "Error: Particle not supported. " \
+    + "Supported particles: " + str( particle_list )
+
+assert dataFormat in format_list, \
+    "Error: Data format not supported. " \
+    + "Supported particles: " + str( format_list )
+
+assert formFactor in form_factor_list, \
+    "Error: Form factor not supported. " \
+    + "Supported form factors: " + str( form_factor_list )
+
+assert configNum % binSize == 0, "Number of configurations " \
+    + str( configNum ) + " not evenly divided by bin size " \
+    + str( binSize ) + "."
+
+assert configNum % procNum == 0, "Number of configurations " \
+    + str( configNum ) + " not evenly divided by number of processes " \
+    + str( procNum ) + "."
+
+if particle == "pion":
+
+    projector = [ "" ]
+
+    flavNum = 1
+    flav_str = [ "up" ]
+
+    if formFactor == "1D":
+
+        ratioNum = 7
+
+    else:
+
+        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
+                              + particle, comm )
+
+elif particle == "kaon":
+
+    projector = [ "" ]
+
+    flavNum = 2
+    flav_str = [ "up", "strange" ]
+
+    ratioNum = 10
+
+    if formFactor == "1D":
+
+        ratioNum = 7
+
+    else:
+
+        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
+                              + particle, comm )
+
+elif particle == "nucleon":
+
+    projector = [ "0", "4", "5", "6" ]
+
+    flavNum = 2
+    flav_str = [ "IV", "IS" ]
+
+    if formFactor == "EM":
+
+        ratioNum = 10
+
+    else:
+
+        mpi_fncs.mpiPrintErr( "Error: Form factor no supported for " \
+                              + particle, comm )
+
+projNum = len( projector )
+
+if formFactor == "EM":
+
+    Z = 1.0
+
+elif formFactor == "1D":
+
+    Z = 1.123
+
+# Read final momentum list
 
 finalMomList = []
 
@@ -282,7 +270,7 @@ if dataFormat == "cpu":
                                               "twop_".format( particle ), \
                                               "ave16", \
                                               "msq{:0>4}".format( momSq ), \
-                                              "mvec" )[ 0, 0, 0, ... ].real, \
+                                              "mvec" )[ 0, 0, 0, ... ], \
                               dtype = int )
 
 else:
@@ -296,6 +284,8 @@ else:
         mpi_fncs.mpiPrintErr( "ERROR: nonzero momenta boost not yet " \
                + "supported for gpu or ASCII format", comm )
         
+#mpi_fncs.mpiPrint(finalMomList.shape,rank)
+
 # Multiply finalMomList by -1 because three-point functions are named
 # opposite their sign (sign of phase negative because adjoint taken of
 # sequential propagator)
@@ -303,6 +293,28 @@ else:
 finalMomList = -1 * finalMomList
 
 finalMomNum = len( finalMomList )
+
+# Momentum list
+
+Q_threep_template = "{0}{1}{2}".format( threep_tokens[0], \
+                                        tsink[0], \
+                                        threep_tokens[1] ) \
+    + "{0:+d}_{1:+d}_{2:+d}.{3}.h5".format( finalMomList[0,0],\
+                                            finalMomList[0,1],\
+                                            finalMomList[0,2],\
+                                            flav_str[0] )
+
+#mpi_fncs.mpiPrint(Q_threep_template,rank)
+
+Q, Qsq, Qsq_start, \
+    Qsq_end = rw.readAndProcessQList( args.momentum_transfer_list, \
+                                      twopDir, configList, \
+                                      twop_template, \
+                                      dataFormat )
+
+QNum = len( Q )
+
+QsqNum = len( Qsq )
 
 ############################
 # Read Two-point Functions #
@@ -313,39 +325,11 @@ finalMomNum = len( finalMomList )
 
 t0 = time.time()
 
-if dataFormat == "cpu":
+twop_loc = rw.readTwopFile_Q( twopDir, configList_loc, twop_template, \
+                              Q, Qsq, Qsq_start, Qsq_end, \
+                              particle, dataFormat )
 
-    twop_loc = rw.getDatasets( twopDir, configList_loc, twop_template, \
-                               "msq0000", "arr" )[ :, 0, 0, :, 0 ].real
-    # CJL: add non-zero Q functionality
-
-elif dataFormat == "ASCII":
-
-    # Determine length of time dimension.
-    # 2nd output is not really configuration number because
-    # files are not formatted like that.
-
-    T, dummy = rw.detTimestepAndConfigNum( twopDir + \
-                                           twop_template.replace( "*", \
-                                                                  configList_loc[0] ) )
-
-    # Get 5th column of two-point files for each configuration
-
-    twop_loc = rw.getTxtData( twopDir, \
-                              configList_loc, \
-                              twop_template, \
-                              dtype=float).reshape( len( configList_loc ), \
-                                                    QNum, T, 6 )[ ..., 4 ]
-
-else:
-        
-    twop_loc = rw.getDatasets( twopDir, configList_loc, \
-                               twop_template, \
-                               "twop" )[ :, 0, 0, ..., 0, 0 ]
-    # CJL: Have to check which axis Q is on
-
-
-twop_loc = np.asarray( twop_loc, order='c' )
+#twop_loc = np.asarray( twop_loc, order='c' )
 
 mpi_fncs.mpiPrint( "Read two-point functions from files " \
                    + "in {:.3} seconds".format( time.time() - t0 ), rank )
@@ -362,6 +346,10 @@ comm.Allgather( twop_loc, twop )
 # Jackknife two-point functions #
 #################################
 
+# Time dimension length after fold
+
+T_fold = T // 2 + 1
+
 if binNum_loc:
 
     twop_jk_loc = np.zeros( ( binNum_loc, QNum, T ) )
@@ -371,8 +359,15 @@ if binNum_loc:
         twop_jk_loc[:,q,:] = fncs.jackknifeBinSubset( twop[:,q,:], \
                                                       binSize, \
                                                       bin_glob[ rank ] )
-    mEff_loc = pq.mEff( twop_jk_loc[:,0,:] )
 
+    # twop_fold[ b, t ]
+
+    twop_fold = fncs.fold( twop_jk_loc )
+
+    # mEff[ b, t ]
+    print("FLAG",file=stderr)
+    mEff_loc = pq.mEffFromSymTwop( twop_fold )
+    print("FLAG",file=stderr)
 else:
 
     twop_jk_loc = np.array( [] )
@@ -386,7 +381,7 @@ else:
 if rank == 0:
 
     twop_jk = np.zeros( ( binNum_glob, QNum, T ) )
-    mEff = np.zeros( ( binNum_glob, T ) )
+    mEff = np.zeros( ( binNum_glob, T_fold ) )
 
 else:
 
@@ -414,21 +409,8 @@ if rank == 0:
 
     mEff_fit = np.zeros( binNum_glob )
 
-    # Loop over bins
-    for b in range( binNum_glob ):
-
-        # Perform the plateau fit
-
-        mEff_fit[ b ] = np.polyfit( range( rangeStart_mEff, \
-                                           rangeEnd + 1 ), \
-                                    mEff[ b, \
-                                          rangeStart_mEff \
-                                          : rangeEnd + 1 ], 0, \
-                                    w=mEff_err[ rangeStart_mEff \
-                                                : rangeEnd + 1 ] )
-
     # End loop over bins
-    """
+
     try:
     
         fitResults = fit.mEffTwopFit( mEff, twop_jk[ :, 0, : ], \
@@ -524,7 +506,7 @@ if rank == 0:
         
     rw.writeFitDataFile( chiSqOutputFilename, chiSq_avg, \
                          chiSq_err, rangeStart, rangeEnd_mEff )
-    """
+
     # mEff_fit_avg
 
     mEff_fit_avg = np.average( mEff_fit, axis=0 )
@@ -539,6 +521,7 @@ if rank == 0:
                          mEff_fit_err, rangeStart_mEff, rangeEnd_mEff )
 
 # End if first process
+exit()
 """
 if momSq > 0:
 

@@ -187,10 +187,10 @@ def getDatasets( configDir, configList, fn_template, *keyword, **kwargs ):
 
     if "dsetname" in kwargs:
 
-        dsetname = [ [ kwargs[ "dsetname" ] \
+        dsetname = [ [ [ kwargs[ "dsetname" ] ] \
                        for fn in range( len( filename[ c ] ) ) ] \
                      for c in range( configNum ) ]
-        
+
     else:
 
         dsetname = getDatasetNames( filename, *keyword )
@@ -240,7 +240,7 @@ def getDatasets_wNames( configDir, configList, fn_template, \
 
     if "dsetname" in kwargs:
 
-        dsetname = [ [ kwargs[ "dsetname" ] \
+        dsetname = [ [ [ kwargs[ "dsetname" ] ] \
                        for fn in range( len( filename[ c ] ) ) ] \
                      for c in range( configNum ) ]
         
@@ -352,12 +352,12 @@ def getHDF5File_wNames( configDir, configList, fn_template, \
     return dataset, datasetName
 
 
-def readAndProcessQList( QFile, threepDir, configList, \
-                         threep_template, dataFormat ):
+def readAndProcessQList( QFile, twopDir, configList, \
+                         twop_template, dataFormat ):
  
     if QFile:
 
-        Q = rw.readTxtFile( args.momentum_transfer_list, dtype=int )
+        Q = readTxtFile( args.momentum_transfer_list, dtype=int )
 
         if dataFormat == "ASCII":
         
@@ -367,22 +367,23 @@ def readAndProcessQList( QFile, threepDir, configList, \
 
         if dataFormat == "gpu":
 
-            mpi_fncs.mpiPrint( "No momentum list given, will read momentum " \
-                               + "from three-point function files", rank )
+            mpi_fncs.mpiPrint( "No momentum list given, will read " \
+                               + "momenta from three-point function " \
+                               + "files", rank )
             
-            Q = rw.getDatasets( threepDir, configList, threep_template, \
+            Q = getDatasets( twopDir, configList, twop_template, \
                                 "Momenta_list" )[ :, 0, 0, ... ]
 
         elif dataFormat == "cpu":
 
-            Q = rw.getDatasets( threepDir, configList, threep_template, \
-                                "mvec" )
+            Q_tmp = getDatasets( twopDir, configList, twop_template, \
+                                 "mvec" )[ 0, 0, ... ]
 
-            print(Q.shape)
-            print(Q)
+            Q = Q_tmp[ 0 ]
 
-            exit()
-            # CJL: HERE
+            for qsq in range( 1, len( Q_tmp ) ):
+                
+                Q = np.concatenate( ( Q, Q_tmp[ qsq ] ), axis=0 )
 
         elif dataFormat == "ASCII":
 
@@ -392,6 +393,75 @@ def readAndProcessQList( QFile, threepDir, configList, \
     Qsq, Qsq_start, Qsq_end = fncs.processMomList( Q )
 
     return Q, Qsq, Qsq_start, Qsq_end
+
+
+def readTwopFile_Q( twopDir, configList, twop_template, \
+                    Q, Qsq, Qsq_start, Qsq_end, \
+                    particle, dataFormat ):
+
+    if dataFormat == "cpu":
+
+        QNum = len( Q )
+        QsqNum = len( Qsq )
+
+        template = "/twop_{0}/ave16/msq{1:0>4}/arr"
+
+        dataset = template.format( particle, 0 )
+
+        twop0 = getDatasets( twopDir, configList, twop_template, \
+                             dsetname=dataset )[:, 0, 0, ... ]
+
+        twop0 = np.moveaxis( twop0, -1, -2 )
+
+        twop = np.zeros( ( len( configList ), QNum, \
+                           twop0.shape[ -1 ] ) )
+
+        twop[ :, 0, : ] = twop0[ :, 0, : ]
+
+        for iqsq in range( QsqNum ):
+
+            dataset = template.format( particle, Qsq[ iqsq ] )
+
+            twop_tmp = getDatasets( twopDir, \
+                                    configList, \
+                                    twop_template, \
+                                    dsetname=dataset )[:, 0, 0, ... ]
+
+            twop[ :, Qsq_start[ iqsq ]: \
+                  Qsq_end[ iqsq ] + 1, : ] = np.moveaxis( twop_tmp, \
+                                                       -1, -2 )
+
+    elif dataFormat == "ASCII":
+
+        # Determine length of time dimension.
+        # 2nd output is not really configuration number because
+        # files are not formatted like that.
+
+        T, dummy = detTimestepAndConfigNum( twopDir + \
+                                            twop_template.replace( "*", \
+                                                                   configList[0] ) )
+
+        # Get 5th column of two-point files for each configuration
+
+        twop = getTxtData( twopDir, \
+                           configList, \
+                           twop_template, \
+                           dtype=float).reshape( len( configList ), \
+                                                 QNum, T, 6 )[ ..., \
+                                                               4 ]
+
+    else:
+        
+        twop = getDatasets( twopDir, configList, \
+                            twop_template, \
+                            "twop" )[ :, 0, 0, ..., 0 ]
+
+        # twop[ c, t, Q ] 
+        # -> twop[ c, Q, t ]
+
+        twop = np.moveaxis( twop, -1, -2 )
+        
+    return twop
 
 
 # Get the real part of gxDx, gyDy, gzDz, and gtDt
@@ -648,31 +718,31 @@ def readAvgXFile( threepDir, configList, threep_tokens,
             threep_gtDt = getDatasets( threepDir, \
                                        configList, \
                                        filename, \
-                                       dsetname=[ dsetname_pre \
+                                       dsetname=dsetname_pre \
                                        + dsetname_insertion[ 0 ] \
-                                       + dsetname_post ] )[ :, 0, 0, \
-                                                            :, 0 ].real
+                                       + dsetname_post )[ :, 0, 0, \
+                                                          :, 0 ].real
             threep_gxDx = getDatasets( threepDir, \
                                        configList, \
                                        filename, \
-                                       dsetname=[ dsetname_pre \
+                                       dsetname=dsetname_pre \
                                        + dsetname_insertion[ 1 ] \
-                                       + dsetname_post ] )[ :, 0, 0, \
-                                                            :, 0 ].real
+                                       + dsetname_post )[ :, 0, 0, \
+                                                          :, 0 ].real
             threep_gyDy= getDatasets( threepDir, \
                                        configList, \
                                        filename, \
-                                       dsetname=[ dsetname_pre \
+                                       dsetname=dsetname_pre \
                                        + dsetname_insertion[ 2 ] \
-                                       + dsetname_post ] )[ :, 0, 0, \
-                                                            :, 0 ].real
+                                       + dsetname_post )[ :, 0, 0, \
+                                                          :, 0 ].real
             threep_gzDz = getDatasets( threepDir, \
                                        configList, \
                                        filename, \
-                                       dsetname=[ dsetname_pre \
+                                       dsetname=dsetname_pre \
                                        + dsetname_insertion[ 3 ] \
-                                       + dsetname_post ] )[ :, 0, 0, \
-                                                            :, 0 ].real
+                                       + dsetname_post )[ :, 0, 0, \
+                                                          :, 0 ].real
 
             threep_s_gxDx = np.array( [] )
             
@@ -691,27 +761,27 @@ def readAvgXFile( threepDir, configList, threep_tokens,
                 threep_s_gtDt = getDatasets( threepDir, \
                                              configList, \
                                              filename_s, \
-                                             dsetname=[ dsetname_s_pre \
-                                                        + dsetname_insertion[ 0 ] \
-                                                        + dsetname_post ] )[ :, 0, 0, :, 0 ].real
+                                             dsetname=dsetname_s_pre \
+                                             + dsetname_insertion[ 0 ] \
+                                             + dsetname_post )[ :, 0, 0, :, 0 ].real
                 threep_s_gxDx = getDatasets( threepDir, \
                                              configList, \
                                              filename_s, \
-                                             dsetname=[ dsetname_s_pre \
-                                                        + dsetname_insertion[ 1 ] \
-                                                        + dsetname_post ] )[ :, 0, 0, :, 0 ].real
+                                             dsetname=dsetname_s_pre \
+                                             + dsetname_insertion[ 1 ] \
+                                             + dsetname_post )[ :, 0, 0, :, 0 ].real
                 threep_s_gyDy= getDatasets( threepDir, \
                                             configList, \
                                             filename_s, \
-                                            dsetname=[ dsetname_s_pre \
-                                                       + dsetname_insertion[ 2 ] \
-                                                       + dsetname_post ] )[ :, 0, 0, :, 0 ].real
+                                            dsetname=dsetname_s_pre \
+                                            + dsetname_insertion[ 2 ] \
+                                            + dsetname_post )[ :, 0, 0, :, 0 ].real
                 threep_s_gzDz = getDatasets( threepDir, \
                                              configList, \
                                              filename_s, \
-                                             dsetname=[ dsetname_s_pre \
-                                                        + dsetname_insertion[ 3 ] \
-                                                        + dsetname_post ] )[ :, 0, 0, :, 0 ].real
+                                             dsetname=dsetname_s_pre \
+                                             + dsetname_insertion[ 3 ] \
+                                             + dsetname_post )[ :, 0, 0, :, 0 ].real
 
                 return [ threep_gxDx, threep_gyDy, \
                          threep_gzDz, threep_gtDt, \
