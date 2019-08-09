@@ -362,12 +362,13 @@ if binNum_loc:
 
     # twop_fold[ b, t ]
 
-    twop_fold = fncs.fold( twop_jk_loc )
+
+    twop_fold = fncs.fold( twop_jk_loc[ :, 0, : ] )
 
     # mEff[ b, t ]
-    print("FLAG",file=stderr)
+
     mEff_loc = pq.mEffFromSymTwop( twop_fold )
-    print("FLAG",file=stderr)
+
 else:
 
     twop_jk_loc = np.array( [] )
@@ -390,11 +391,18 @@ else:
 
 recvCount, recvOffset = mpi_fncs.recvCountOffset( procNum, binNum )
 
+#print(mEff.shape)
+#print(mEff_loc.shape)
+#print(recvCount)
+#print(recvOffset)
+
 #comm.Gatherv( twop_jk_loc, [ twop_jk, recvCount * QNum * T, \
 #                             recvOffset * QNum * T, MPI.DOUBLE ], root=0 )
-comm.Gatherv( mEff_loc, [ mEff, recvCount * T, \
-                          recvOffset * T, MPI.DOUBLE ], root=0 )
+comm.Gatherv( mEff_loc, [ mEff, recvCount * T_fold, \
+                          recvOffset * T_fold, MPI.DOUBLE ], root=0 )
 
+exit()
+#CJL: Up to HERE has been tested
 if rank == 0:
 
     # mEff_avg[ t ]
