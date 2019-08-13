@@ -1,10 +1,42 @@
 import numpy as np
 import mpi_functions as mpi_fncs
 
+# E=sqrt(m^2+Q^2)
+
 def energy( mEff, Qsq, L ):
 
     return np.sqrt( mEff ** 2 + ( 2.0 * np.pi / L ) ** 2 * Qsq )
 
+
+# E+m
+
+def Epm( mEff, Qsq, L ):
+
+    return energy( mEff, Qsq, L ) + mEff
+
+
+# E-m
+
+def Emm( mEff, Qsq, L ):
+
+    return energy( mEff, Qsq, L ) - mEff
+
+
+# 2E+m
+
+def twoEpm( mEff, Qsq, L ):
+
+    return 2* energy( mEff, Qsq, L ) + mEff
+
+
+# 2E-m
+
+def twoEmm( mEff, Qsq, L ):
+
+    return 2 * energy( mEff, Qsq, L ) - mEff
+
+
+# KK=sqrt(2E(E+m))
 
 def KK( mEff, Qsq, L ):
 
@@ -13,7 +45,22 @@ def KK( mEff, Qsq, L ):
                         + mEff ) )
 
 
-def kineFactor_GE_GM( ratio_err, mEff, Q, L ):
+# C1=sqrt(m/E)
+
+def C1( mEff, Qsq, L ):
+
+    return np.sqrt( mEff / energy( mEff, Qsq, L ) )
+
+
+# C2=m/sqrt(EE')
+
+def C2( mEff, Qsq, Qsq_prime, L ):
+
+    return mEff / np.sqrt( energy( mEff, Qsq, L ) \
+                           * energy( mEff, Qsq_prime, L ) )
+
+
+def formFactorKinematic( ratio_err, mEff, Q, L, particle, formFactor ):
 
     # ratio_err[ Q, r ]
     # mEff[ b ]
@@ -23,7 +70,7 @@ def kineFactor_GE_GM( ratio_err, mEff, Q, L ):
     ratioNum = ratio_err.shape[ -1 ]
     binNum = len( mEff )
 
-    assert len( Q ) == momNum, "Error (kineFactor_GE_GM): " \
+    assert len( Q ) == momNum, "Error (kineFactor): " \
         + "momentum dimension of ratio errors " \
         + str( momNum ) + " and momentum transfers " \
         + str( len( Q ) ) + " do not match. "
@@ -38,20 +85,86 @@ def kineFactor_GE_GM( ratio_err, mEff, Q, L ):
 
             Qsq = np.dot( Q[ q ], Q[ q ] )
 
-            kineFactor[ b, q ] = [ [ ( energy( mEff[ b ], \
-                                               Qsq, L ) \
-                                       + mEff[ b ] ), 0 ], \
-                                   [ -2.0 * np.pi / L * Q[ q, 0 ], 0 ], \
-                                   [ -2.0 * np.pi / L * Q[ q, 1 ], 0 ], \
-                                   [ -2.0 * np.pi / L * Q[ q, 2 ], 0 ], \
-                                   [ 0, -2.0 * np.pi / L * Q[ q, 2 ] ], \
-                                   [ 0, 2.0 * np.pi / L * Q[ q, 1 ] ], \
-                                   [ 0, 2.0 * np.pi / L * Q[ q, 2 ] ], \
-                                   [ 0, -2.0 * np.pi / L * Q[ q, 0 ] ], \
-                                   [ 0, -2.0 * np.pi / L * Q[ q, 1 ] ], \
-                                   [ 0, 2.0 * np.pi / L * Q[ q, 0 ] ] ] \
-                / np.repeat( ratio_err[ q ], 2).reshape( 10 ,2 ) \
-                / KK( mEff[ b ], Qsq, L )
+            if formFactor == "EM":
+
+                #if particle == "nucleon":
+
+                # R_P0mu0 = [ (E+m), 0 ]
+                # R_P0mu1 = [ -Q_x, 0 ]
+                # R_P0mu2 = [ -Q_y, 0 ]
+                # R_P0mu3 = [ -Q_z, 0 ]
+                # R_P4mu2 = [ 0, -Q_z ]
+                # R_P4mu3 = [ 0, Q_y ]
+                # R_P5mu1 = [ 0, Q_z ]
+                # R_P5mu3 = [ 0, -Q_x ]
+                # R_P6mu1 = [ 0, -Q_y ]
+                # R_P6mu2 = [ 0, Q_x ]
+                
+                kineFactor[ b, q ] = [ [ Epm( mEff[ b ], Qsq, L ), \
+                                         0 ], \
+                                       [ -2.0 * np.pi / L * Q[ q, 0 ], 0 ], \
+                                       [ -2.0 * np.pi / L * Q[ q, 1 ], 0 ], \
+                                       [ -2.0 * np.pi / L * Q[ q, 2 ], 0 ], \
+                                       [ 0, -2.0 * np.pi / L * Q[ q, 2 ] ], \
+                                       [ 0, 2.0 * np.pi / L * Q[ q, 1 ] ], \
+                                       [ 0, 2.0 * np.pi / L * Q[ q, 2 ] ], \
+                                       [ 0, -2.0 * np.pi / L * Q[ q, 0 ] ], \
+                                       [ 0, -2.0 * np.pi / L * Q[ q, 1 ] ], \
+                                       [ 0, 2.0 * np.pi / L * Q[ q, 0 ] ] ] \
+                    / np.repeat( ratio_err[ q ], 2 ).reshape( ratioNum, 2 ) \
+                    / KK( mEff[ b ], Qsq, L )
+                    
+                #else: 
+
+                    # CJL: I do not know this one
+
+            elif formFactor == "1D":
+                
+                #if particle == "nucleon":
+                    
+                    # CJL: I do not know this one
+
+                #else:
+
+                # {R_g0D0} = [ -1/4(E+m)(2E+m), -(E-m)(2E-m) ]
+                # {R_g0Dx} = [ -i/2(E+m)Q_x, -2i(E-m)Q_x ]
+                # {R_g0Dy} = [ -i/2(E+m)Q_y, -2i(E-m)Q_y ]
+                # {R_g0Dz} = [ -i/2(E+m)Q_z, -2i(E-m)Q_z ]
+                # {R_gxDy} = [ 1/2 Q_x Q_y, 2 Q_x Q_y ]
+                # {R_gxDz} = [ 1/2 Q_x Q_z, 2 Q_x Q_z ]
+                # {R_gyDz} = [ 1/2 Q_y Q_z, 2 Q_y Q_z ]
+
+                kineFactor[ b, q ] = [ [ -0.25 * Epm( mEff[ b ], Qsq, L ) \
+                                         * twoEpm( mEff[b ], Qsq, L ), \
+                                         -Emm( mEff[ b ], Qsq, L ) \
+                                         * twoEmm( mEff[ b ], Qsq, L ) ], \
+                                       [ -0.5 * Epm( mEff[ b ], Qsq, L ) \
+                                         * 2 * np.pi / L * Q[ q, 0 ], \
+                                         -2 * Emm( mEff[ b ], Qsq, L )
+                                         * 2 * np.pi / L * Q[ q, 0 ] ], \
+                                       [ -0.5 * Epm( mEff[ b ], Qsq, L ) \
+                                         * 2 * np.pi / L * Q[ q, 1 ], \
+                                         -2 * Emm( mEff[ b ], Qsq, L )
+                                         * 2 * np.pi / L * Q[ q, 1 ] ], \
+                                       [ -0.5 * Epm( mEff[ b ], Qsq, L ) \
+                                         * 2 * np.pi / L * Q[ q, 2 ], \
+                                         -2 * Emm( mEff[ b ], Qsq, L )
+                                         * 2 * np.pi / L * Q[ q, 2 ] ], \
+                                         [ 0, -2.0 * np.pi / L * Q[ q, 2 ] ], \
+                                       [ 0.5 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 0 ] * Q[ q, 1 ], \
+                                         2 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 0 ] * Q[ q, 1 ] ] ] \
+                                       [ 0.5 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 0 ] * Q[ q, 2 ], \
+                                         2 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 0 ] * Q[ q, 2 ] ] ] \
+                                       [ 0.5 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 1 ] * Q[ q, 2 ], \
+                                         2 * ( 2 * np.pi / L ) ** 2 \
+                                         * Q[ q, 1 ] * Q[ q, 2 ] ] ] \
+                    / np.repeat( ratio_err[ q ], 2 ).reshape( ratioNum, 2 ) \
+                    * C1( mEff[ b ], Qsq, L )
 
     return kineFactor
 
@@ -274,21 +387,32 @@ def calcRatio_Q( threep, twop, tsink ):
 
 # threep:
 
-def calcEMFF( threep, twop, Qsq, mEff, tsink, latticeDim ):
+def calcEMFF( threep, twop, Qsq, mEff, tsink, L ):
+
+    # threep[ q, b, t ]
+    # twopp[ q, b, t ]
+    # Qsq[ q ]
+    # mEff[ b ]
+    # tsink
+    # L
 
     emff = np.zeros( threep.shape )
 
     for q in range( threep.shape[ 0 ] ):
 
-        energy = np.sqrt( mEff ** 2 + ( 2 * np.pi / latticeDim ) ** 2 * Qsq[ q ] )
-        
-        factor = 4.0 * np.sqrt( energy * mEff ) / ( energy + mEff )
+        factor = 0.25 * np.sqrt( energy( mEff, Qsq[ q ], L ) / mEff ) \
+                 / ( energy( mEff, Qsq[ q ], L ) + mEff )
 
         for t in range( threep.shape[ 2 ] ):
 
-            emff[ q, :, t ] = factor * threep[ q, :, t ] / twop[ 0, :, tsink ] \
-                             * np.sqrt( twop[ q, :, tsink - t ] * twop[ 0, :, t ] * twop[ 0, :, tsink ] \
-                                        / ( twop[ 0, :, tsink - t ] * twop[ q, :, t ] * twop[ q, :, tsink ] ) )
+            emff[ q, :, t ] = factor * threep[ q, :, t ] \
+                              / twop[ 0, :, tsink ] \
+                             * np.sqrt( np.abs( twop[ q, :, tsink - t ] \
+                                                * twop[ 0, :, t ] \
+                                                * twop[ 0, :, tsink ] \
+                                                / ( twop[ 0, :, tsink - t ] \
+                                                    * twop[ q, :, t ] \
+                                                    * twop[ q, :, tsink ] ) ) )
 
     return emff
 

@@ -73,7 +73,8 @@ mEff = rw.readNthDataCol( mEff_filename, 1 )
 
 # kineFacter[ b, Q, r, [ GE, GM ] ]
 
-kineFactor = pq.kineFactor_GE_GM( ratio_err, mEff, momList, L )
+kineFactor = pq.formFactorKinematic( ratio_err, mEff, momList, \
+                                     L, "nucleon", "EM" )
 
 ###############
 # Perform SVD #

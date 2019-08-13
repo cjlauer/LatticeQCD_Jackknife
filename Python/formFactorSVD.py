@@ -521,7 +521,7 @@ if rank == 0:
                          mEff_fit_err, rangeStart_mEff, rangeEnd_mEff )
 
 # End if first process
-exit()
+
 """
 if momSq > 0:
 
@@ -607,11 +607,11 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
         # threep_loc[ flav, proj, conf, Q, curr, t ]
 
-        threep_loc = rw.readEMFormFactorFile( threepDir, configList_loc, \
-                                              threep_tokens, Qsq, QNum, \
-                                              ts, projector, \
-                                              finalMomList[ ip ], \
-                                              particle, dataFormat )
+        threep_loc = rw.readFormFactorFile( threepDir, configList_loc, \
+                                            threep_tokens, Qsq, QNum, \
+                                            ts, projector, \
+                                            finalMomList[ ip ], \
+                                            particle, dataFormat, formFactor )
 
         mpi_fncs.mpiPrint( "Read three-point functions from files " \
                            + "for tsink {} in {:.4}".format( ts, \
@@ -636,47 +636,98 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
         # threep_loc[ flav, proj, conf, Q, curr, t ]
         # -> threep_loc[ flav, conf, Q, ratio, t ]
 
-        # ratio   ProjInsertion
-        # 0       P0g0
-        # 1       P0g1
-        # 2       P0g2
-        # 3       P0g3
-        # 4       P4g2
-        # 5       P4g3
-        # 6       P5g1
-        # 7       P5g3
-        # 8       P6g1
-        # 9       P6g2
-        # CJL: this might be different for mesons
+        if formFactor = "EM":
 
-        threep_loc = np.stack ( [ threep_loc[ :, 0, :, :, 0, : ].real, \
-                                  threep_loc[ :, 0, :, :, 1, : ].imag, \
-                                  threep_loc[ :, 0, :, :, 2, : ].imag, \
-                                  threep_loc[ :, 0, :, :, 3, : ].imag, \
-                                  threep_loc[ :, 1, :, :, 2, : ].real, \
-                                  threep_loc[ :, 1, :, :, 3, : ].real, \
-                                  threep_loc[ :, 2, :, :, 1, : ].real, \
-                                  threep_loc[ :, 2, :, :, 3, : ].real, \
-                                  threep_loc[ :, 3, :, :, 1, : ].real, \
-                                  threep_loc[ :, 3, :, :, 2, : ].real ], \
-                                axis=3 )
-        
-        threep = np.zeros( ( flavNum, configNum, QNum, \
-                             ratioNum, threepTimeNum ) )
+            if particle == "nucleon":
 
-        # Allgather threep for each flavor so that 
-        # everything is in the correct order
+                # ratio   ProjInsertion
+                # 0       P0g0
+                # 1       P0g1
+                # 2       P0g2
+                # 3       P0g3
+                # 4       P4g2
+                # 5       P4g3
+                # 6       P5g1
+                # 7       P5g3
+                # 8       P6g1
+                # 9       P6g2
+                
+                threep_loc = np.stack ( [ threep_loc[ :, 0, :, :, 0, : ].real, \
+                                          threep_loc[ :, 0, :, :, 1, : ].imag, \
+                                          threep_loc[ :, 0, :, :, 2, : ].imag, \
+                                          threep_loc[ :, 0, :, :, 3, : ].imag, \
+                                          threep_loc[ :, 1, :, :, 2, : ].real, \
+                                          threep_loc[ :, 1, :, :, 3, : ].real, \
+                                          threep_loc[ :, 2, :, :, 1, : ].real, \
+                                          threep_loc[ :, 2, :, :, 3, : ].real, \
+                                          threep_loc[ :, 3, :, :, 1, : ].real, \
+                                          threep_loc[ :, 3, :, :, 2, : ].real ], \
+                                        axis=3 )
+
+            else:
+
+            
+                # ratio   Insertion
+                # 0       g0
+                # 1       g1
+                # 2       g2
+                # 3       g3
+                
+                threep_loc = np.stack( [ threep_loc[ :, 0, :, :, \
+                                                     0, : ].real, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     1, : ].imag, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     2, : ].imag, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     3, : ].imag ], \
+                                       axis=3 )
+
+        elif formFactor == "1D":
+
+            if particle == "nucleon":
+
+                mpi_fncs.mpirPrintError( "CJL: I do not know this one.", \
+                                         comm )
+
+            else:
+
+                # ratio   Insertion
+                # 0       {g0D0}
+                # 1       {gxD0}
+                # 2       {gyD0}
+                # 3       {gzD0}
+                # 4       {gyDx}
+                # 5       {gzDx}
+                # 6       {gzDy}
+
+                threep_loc = np.stack( [ threep_loc[ :, 0, :, :, \
+                                                     0, : ].real, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     1, : ].imag, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     2, : ].imag, \
+                                         threep_loc[ :, 0, :, :, \
+                                                     3, : ].imag ], \
+                                         threep_loc[ :, 0, :, :, \
+                                                     4, : ].real ], \
+                                         threep_loc[ :, 0, :, :, \
+                                                     5, : ].real ], \
+                                         threep_loc[ :, 0, :, :, \
+                                                     6, : ].real ], \
+                                       axis=3 )
 
         # Loop over flavor
         for iflav in range( flavNum ):
+
+            # threep[ c, Q, r, t ]
+
+            threep = np.zeros( ( configNum, QNum, \
+                                 ratioNum, threepTimeNum ) )
 
             comm.Allgather( threep_loc[ iflav ], \
-                            threep[ iflav ] )
+                            threep )
 
-        # End loop over flavor
-
-        # Loop over flavor
-        for iflav in range( flavNum ):
             # If bin on this process
             if binNum_loc:
 
@@ -697,8 +748,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
                         threep_jk[:, \
                                   iq, \
-                                  :]=fncs.jackknifeBinSubset(threep[iflav, \
-                                                                    :, iq, \
+                                  :]=fncs.jackknifeBinSubset(threep[:, iq, \
                                                                     ir, \
                                                                     : ], \
                                                              binSize, \
@@ -775,16 +825,32 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                 #print("mEff_fit")                
                 #print(mEff_fit[0])
 
-                kineFactor = pq.kineFactor_GE_GM( ratio_fit_err, \
-                                                  mEff_fit, Q, L )
+                kineFactor = pq.formFactorKinematic( ratio_fit_err, \
+                                                     mEff_fit, Q, L, \
+                                                     particle, formFactor )
 
                 #print(kineFactor[0])
 
-                GE = np.zeros( ( QsqNum, binNum_glob ) )
-                GM = np.zeros( ( QsqNum, binNum_glob ) )
+                # ratio_fit[ b, Q, ratio, [ A, B ] ]
+                # -> ratio_fit[ b, Q * ratio, [ A, B ] ]
 
-                gE = np.zeros( ( QsqNum, binNum_glob ) )
-                gM = np.zeros( ( QsqNum, binNum_glob ) )
+                ratio_fit = ratio_fit.reshape( binNum_glob, \
+                                               QsqNum * ratioNum )
+
+                # ratio_fit_err[ Q, ratio ]
+                # -> ratio_fit_err[ b, Q * ratio ]
+
+                ratio_fit_err = ratio_fit_err.reshape( QsqNum * ratioNum )
+                ratio_fit_err = np.array( [ ratio_fit_err \
+                                            for b in range( binNum_glob ) ] )
+
+                # For EM form factor:
+                # A = GE, B = GM
+                # For generalized 1D form factor:
+                # A = A20, B = A22
+
+                A = np.zeros( ( QsqNum, binNum_glob ) )
+                B = np.zeros( ( QsqNum, binNum_glob ) )
 
                 for qsq in range( QsqNum ):
 
@@ -836,57 +902,62 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
                     # End loop over bins
 
-                    #print("S")
-                    #print(smat)
-                    #print("S^-1")
-                    #print(smat_inv[0])
+                    # decomp = ( u s v^T )^-1
+                    # decomp[ b, [ A, B ], Q * ratio ]
 
-                    # decomp[ b, Q, ratio, [ GE, GM ] ]
+                    decomp= v @ smat_inv @ uT                    
 
-                    decomp=np.transpose(v@smat_inv@uT, \
-                                         (0,2,1))
-                    
-                    decomp = decomp.reshape(binNum_glob, \
-                                            Qsq_end[ qsq ] \
-                                            - Qsq_start[ qsq ] \
-                                            + 1, \
-                                            ratioNum,2)
+                    A[ qsq ] = ( decomp[ :, 0, : ] \
+                                 @ ratio_fit[ Qsq_start[ qsq ] \
+                                              : Qsq_end[ qsq ] + 1 ] ) \
+                        * ratio_fit_err[ :, Qsq_start[ qsq ]
+                                         : Qsq_end[ qsq ] + 1 ]
 
-                    gE[ qsq ], gM[ qsq ]  = pq.calc_gE_gM( decomp, \
-                                                           ratio_fit, \
-                                                           ratio_fit_err, \
-                                                           Qsq_start[ qsq ],\
-                                                           Qsq_end[ qsq ] )
-                    
+                    B[ qsq ] = ( decomp[ :, 1, : ] \
+                                 @ ratio_fit[ Qsq_start[ qsq ] \
+                                              : Qsq_end[ qsq ] + 1 ] ) \
+                        * ratio_fit_err[ :, Qsq_start[ qsq ]
+                                         : Qsq_end[ qsq ] + 1 ]
+
                 # End loop over Q^2
 
                 # Average over bins
 
-                gE_avg = np.average( gE, axis=-1 )
-                gE_err = fncs.calcError( gE, binNum_glob, axis=-1 )
+                A_avg = np.average( A, axis=-1 )
+                A_err = fncs.calcError( A, binNum_glob, axis=-1 )
 
-                gM_avg = np.average( gM, axis=-1 )
-                gM_err = fncs.calcError( gM, binNum_glob, axis=-1 )
+                B_avg = np.average( B, axis=-1 )
+                B_err = fncs.calcError( B, binNum_glob, axis=-1 )
 
                 ################
                 # Write output #
                 ################
 
-                output_filename = output_template.replace( "*", \
-                                                           particle + "_" \
-                                                           + flav_str[iflav] \
-                                                           + "_GE_tsink" \
-                                                           + str( ts ) )
-                rw.writeAvgDataFile_wX( output_filename, Qsq, \
-                                           gE_avg, gE_err )
+                if formFactor == "EM":
+
+                    ff_str = [ "GE", "GM" ]
+
+                elif formFactor == "1D":
+
+                    ff_str = [ "A20", "A22" ]
 
                 output_filename = output_template.replace( "*", \
                                                            particle + "_" \
                                                            + flav_str[iflav] \
-                                                           + "_GM_tsink" \
+                                                           + "_" + ff_str[ 0 ]\
+                                                           + "_tsink" \
                                                            + str( ts ) )
                 rw.writeAvgDataFile_wX( output_filename, Qsq, \
-                                           gM_avg, gM_err )
+                                           A_avg, A_err )
+
+                output_filename = output_template.replace( "*", \
+                                                           particle + "_" \
+                                                           + flav_str[iflav] \
+                                                           + "_" + ff_str[ 1 ]\
+                                                           + "_tsink" \
+                                                           + str( ts ) )
+                rw.writeAvgDataFile_wX( output_filename, Qsq, \
+                                           B_avg, B_err )
 
             # End if first process
         # End loop over flavor

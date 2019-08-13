@@ -608,11 +608,11 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
         # threep_loc[ flav, proj, conf, Q, curr, t ]
 
-        threep_loc = rw.readEMFormFactorFile( threepDir, configList_loc, \
-                                              threep_tokens, Qsq, QNum, \
-                                              ts, projector, \
-                                              finalMomList[ ip ], \
-                                              particle, dataFormat )
+        threep_loc = rw.readFormFacttorThreep( threepDir, configList_loc, \
+                                               threep_tokens, Qsq, QNum, \
+                                               ts, projector, \
+                                               finalMomList[ ip ], \
+                                               particle, dataFormat, "EM" )
 
         mpi_fncs.mpiPrint( "Read three-point functions from files " \
                            + "for tsink {} in {:.4}".format( ts, \
@@ -776,9 +776,10 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                 #print("mEff_fit")                
                 #print(mEff_fit[0])
 
-                kineFactor = pq.kineFactor_GE_GM( ratio_fit_err, \
-                                                  mEff_fit, Q, L )
-
+                kineFactor = pq.formFactorKinematic( ratio_fit_err, \
+                                                     mEff_fit, Q, L, \
+                                                     particle, "EM" )
+                
                 #print(kineFactor[0])
 
                 GE = np.zeros( ( QsqNum, binNum_glob ) )

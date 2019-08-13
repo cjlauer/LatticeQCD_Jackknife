@@ -7,8 +7,6 @@ import functions as fncs
 import readWrite as rw
 import physQuants as pq
 
-Zv = 0.728
-
 latticeSpacing = 0.093
 
 latticeDim = 32
@@ -68,36 +66,7 @@ output_template = args.output_template
 # Get configurations from given list or from given threep
 # directory if list not given
 
-if args.config_list:
-
-    if args.config_list in ls( "./" ):
-
-        with open( args.config_list, "r" ) as configFile:
-
-            configList = configFile.read().splitlines()
-
-    else:
-
-        print "WARNING: Given configuration list not in this directory. " \
-            + "Will use all configurations in configuration directory."
-
-        configList = ls( threepDir )
-
-else:
-
-    configList = ls( threepDir )
-
-    configList = sorted( configList )
-
-    configFilename = "./confs.txt_Fpi"
-
-    with open( configFilename, "w" ) as configFile:
-
-        for config in configList:
-
-            configFile.write( str( config ) + "\n" )
-
-    print "Configuration list written"
+configList = fncs.getConfigList( args.config_list, twopDir )
 
 configNum = len( configList )
 
@@ -107,13 +76,13 @@ timestepNum, binNum = rw.detTimestepAndConfigNum( mEff_filename )
 
 if configNum % binNum != 0:
 
-    print "Number of configurations " + str( configNum ) \
+    print( "Number of configurations " + str( configNum ) \
         + " not evenly divided by number of bins " + str( binNum ) \
-        + " in effective mass file " + mEff_filename + ".\n"
+        + " in effective mass file " + mEff_filename + ".\n" )
 
     exit()
 
-binSize = configNum / binNum
+binSize = configNum // binNum
 
 ########################
 # Fit effective masses #
@@ -135,7 +104,7 @@ for b in range( binNum ):
                                 mEff[ b, mEff_fitStart : mEff_fitEnd + 1 ], \
                                 0, w=mEff_err[ mEff_fitStart : mEff_fitEnd + 1 ] )
 
-print "Fit effective mass"
+print( "Fit effective mass" )
 
 #####################
 # Average over bins #
@@ -176,7 +145,7 @@ Qsq_GeV = pq.convertQsqToGeV( Qsq, latticeSpacing * mEff_fit_avg, latticeSpacing
 
 twop = rw.getDatasets( twopDir, configList, twop_template, "twop" )[ :, 0, 0, ..., 0 ]
 
-print "Read two-point functions from HDF5 files"
+print( "Read two-point functions from HDF5 files" )
 
 # Average over equal Q^2
 # twop_avg[ Q^2, c, t ]
@@ -194,6 +163,8 @@ for q in range( twop_avg.shape[ 0 ] ):
 
 twop_jk = np.array( twop_jk )
 
+print(twop_jk)
+
 for ts in tsink:
     
     #########################
@@ -203,9 +174,14 @@ for ts in tsink:
     # Get the real part of gamma4 insertion three-point functions
     # threep[ c, t, Q ]
 
-    threep = rw.getDatasets( threepDir, configList, threep_template, "tsink_" + str( ts ), "noether", "threep" )[ :, 0, 0, ..., 3, 0 ]
+    threep = rw.getDatasets( threepDir, configList, \
+                             threep_template, \
+                             "tsink_" + str( ts ), \
+                             "noether", \
+                             "threep" )[ :, 0, 0, ..., 3, 0 ]
 
-    print "Read three-point functions from HDF5 files for tsink " + str( ts )
+    print( "Read three-point functions from HDF5 files for tsink " \
+           + str( ts ) )
 
     # Average over equal Q^2
     # threep_avg[ Q^2, c, t ]
@@ -219,7 +195,8 @@ for ts in tsink:
 
     for q in range( threep_avg.shape[ 0 ] ):
 
-        threep_jk.append( fncs.jackknife( threep_avg[ q, ... ], binSize ) )
+        threep_jk.append( fncs.jackknife( threep_avg[ q, ... ], \
+                                          binSize ) )
 
     threep_jk = np.array( threep_jk )
 
@@ -227,7 +204,8 @@ for ts in tsink:
     # Calculate form factor #
     #########################
 
-    emff = pq.calcEMFF( threep_jk, twop_jk, Qsq, latticeSpacing * mEff_fit, ts, latticeDim )
+    emff = pq.calcEMFF( threep_jk, twop_jk, Qsq, \
+                        mEff_fit, ts, latticeDim )
 
     #####################
     # Average over bins #
@@ -262,6 +240,6 @@ for ts in tsink:
 
     rw.writeFitDataFile( mEff_outputFilename, mEff_fit_avg, mEff_fit_err, mEff_fitStart, mEff_fitEnd )
 
-    print "Wrote output files for tsink " + str( ts )
+    print( "Wrote output files for tsink " + str( ts ) )
 
 # End loop over tsink

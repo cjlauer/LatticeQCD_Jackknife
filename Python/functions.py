@@ -343,7 +343,9 @@ def averageOverQsq( data, Qsq_start, Qsq_end ):
 
     for q in range( QsqNum ):
 
-        avg[ q ] = np.average( data[ ..., start[ q ] : end[ q ] + 1 ], \
+        avg[ q ] = np.average( data[ ..., \
+                                     Qsq_start[ q ] : \
+                                     Qsq_end[ q ] + 1 ], \
                                axis=-1 )
             
     return np.array( avg )

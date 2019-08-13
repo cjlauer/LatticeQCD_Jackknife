@@ -801,16 +801,31 @@ def readAvgXFile( threepDir, configList, threep_tokens,
                 exit()                
 
 
-def readEMFF_cpu( threepDir, configList, threep_template, Qsq, ts, proj, \
-                  particle, **kwargs ):
+def readFF_cpu( threepDir, configList, threep_template, Qsq, ts, proj, \
+                  particle, formFactor, **kwargs ):
 
     QsqNum = len( Qsq )
 
-    insertionCurrent = [ "=noe:g0=" , \
-                         "=noe:gx=" , \
-                         "=noe:gy=" , \
-                         "=noe:gz=" ]
+    if formFactor == "EM":
+
+        insertionCurrent = [ "=noe:g0=" , \
+                             "=noe:gx=" , \
+                             "=noe:gy=" , \
+                             "=noe:gz=" ]
                          
+    elif formFactor == "1D":
+
+        insertionCurrent = [ "=der:g0D0:sym=", \
+                             "=der:gxDx:sym=", \
+                             "=der:gyDy:sym=", \
+                             "=der:gzDz:sym=", \
+                             "=der:gxD0:sym=", \
+                             "=der:gyD0:sym=", \
+                             "=der:gzD0:sym=", \
+                             "=der:gyDx:sym=", \
+                             "=der:gzDx:sym=", \
+                             "=der:gzDy:sym=" ]
+
     insertionNum = len( insertionCurrent )
 
     # Set data set names
@@ -856,17 +871,37 @@ def readEMFF_cpu( threepDir, configList, threep_template, Qsq, ts, proj, \
     threep = threep.reshape( threep.shape[ 0 ], QsqNum, \
                              insertionNum, threep.shape[ -1 ] )
                         
+    if formFactor == "1D":
+        
+        # threep_tmp[ conf, Qsq, curr, t ]
+
+        threep_tmp = np.zeros( threep.shape[ :2 ] \
+                               + ( threep.shape[ 2 ] - 3, \
+                                   threep.shape[-1] ) )
+
+        # 1st current is g0D0 - 1/4( g0D0 + gxDx + gyDy + gzDz )
+
+        threep_tmp[ ..., 0, : ] = threep[ ..., 0, : ] \
+                                  - 0.25 * ( threep[ ..., 0, : ] \
+                                             + threep[ ..., 1, : ] \
+                                             + threep[ ..., 2, : ] \
+                                             + threep[ ..., 3, : ] )
+        
+        threep_tmp[ ..., 1:, : ] = threep[ ..., 4:, : ]
+
+        threep = threep_tmp
+
     return threep
 
     
-def readEMFF_gpu( threepDir, configList, threep_tokens, \
+def readFF_gpu( threepDir, configList, threep_tokens, \
                   QsqList, ts, proj, momBoost, particle, \
                   dataFormat, **kwargs ):
 
     return
 
-def readEMFF_ASCII( threepDir, configList, threep_template, \
-                    QNum, insertionNum, **kwargs ):
+def readFF_ASCII( threepDir, configList, threep_template, \
+                    QNum, insertionNum, formFactor, **kwargs ):
 
     # threep[ conf, QNum*t*curr ]
     
@@ -899,12 +934,12 @@ def readEMFF_ASCII( threepDir, configList, threep_template, \
     return threep
 
 
-def readEMFormFactorFile( threepDir, configList, threep_tokens, Qsq, QNum, \
+def readFormFactorThreep( threepDir, configList, threep_tokens, Qsq, QNum, \
                           ts, proj, momBoost, particle, dataFormat, \
-                          **kwargs ):
+                          formFactor, **kwargs ):
 
     flavor, flavorNum = fncs.setFlavorStrings( particle, dataFormat )
-
+    
     projNum = len( proj )
 
     threep = fncs.initEmptyList( np.zeros( ( flavorNum, projNum ) ), 2 )
@@ -928,11 +963,11 @@ def readEMFormFactorFile( threepDir, configList, threep_tokens, Qsq, QNum, \
                                                    momBoost[2], \
                                                    flav )
 
-                threep[ iflav ][ ip ] = readEMFF_cpu( threepDir, \
-                                                      configList, \
-                                                      threep_template, \
-                                                      Qsq, ts, p, particle, \
-                                                      **kwargs )
+                threep[ iflav ][ ip ] = readFF_cpu( threepDir, \
+                                                    configList, \
+                                                    threep_template, \
+                                                    Qsq, ts, p, particle, \
+                                                    formFactor, **kwargs )
 
 
             elif dataFormat == "gpu":
@@ -952,19 +987,15 @@ def readEMFormFactorFile( threepDir, configList, threep_tokens, Qsq, QNum, \
                 threep_template = template.format( threep_tokens[0], p, \
                                                    threep_tokens[1], ts, \
                                                    threep_tokens[2], \
-                                                   flav )
+                                                   flav, formFactor )
 
                 #print(threep_template)
 
-                threep[ iflav ][ ip ] = readEMFF_ASCII( threepDir, \
+                threep[ iflav ][ ip ] = readFF_ASCII( threepDir, \
                                                         configList, \
                                                         threep_template, \
                                                         QNum, 4, **kwargs )
-                """
-                if "comm" in kwargs:
 
-                    print( "FLAG {} {}".format( flav, p), kwargs["comm"].Get_rank() )
-                """
         # End loop over projection
     # End loop over flavor
 
