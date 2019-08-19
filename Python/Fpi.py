@@ -130,11 +130,9 @@ momList = rw.getDatasets( threepDir, configList, threep_template, "Momenta_list"
 
 Qsq, Qsq_start, Qsq_end = fncs.processMomList( momList )
 
-######################
-# Convert Q^2 to GeV #
-######################
-
-Qsq_GeV = pq.convertQsqToGeV( Qsq, latticeSpacing * mEff_fit_avg, latticeSpacing, latticeDim )
+#print( Qsq )
+#print( Qsq_start )
+#print( Qsq_end )
 
 #######################
 # Two-point functions #
@@ -146,6 +144,8 @@ Qsq_GeV = pq.convertQsqToGeV( Qsq, latticeSpacing * mEff_fit_avg, latticeSpacing
 twop = rw.getDatasets( twopDir, configList, twop_template, "twop" )[ :, 0, 0, ..., 0 ]
 
 print( "Read two-point functions from HDF5 files" )
+
+#print( twop.shape )
 
 # Average over equal Q^2
 # twop_avg[ Q^2, c, t ]
@@ -161,9 +161,11 @@ for q in range( twop_avg.shape[ 0 ] ):
 
     twop_jk.append( fncs.jackknife( twop_avg[ q, ... ], binSize ) )
 
+    #print( fncs.calcError( twop_jk[-1], binNum ) )
+
 twop_jk = np.array( twop_jk )
 
-print(twop_jk)
+#print( twop_jk.shape )
 
 for ts in tsink:
     
@@ -179,6 +181,8 @@ for ts in tsink:
                              "tsink_" + str( ts ), \
                              "noether", \
                              "threep" )[ :, 0, 0, ..., 3, 0 ]
+
+    print(threep.shape)
 
     print( "Read three-point functions from HDF5 files for tsink " \
            + str( ts ) )
@@ -198,7 +202,17 @@ for ts in tsink:
         threep_jk.append( fncs.jackknife( threep_avg[ q, ... ], \
                                           binSize ) )
 
+        #print(fncs.calcError(threep_jk[-1],binNum))
+
     threep_jk = np.array( threep_jk )
+
+    threep_jk_avg = np.average( threep_jk, axis=1 )
+    threep_jk_err = fncs.calcError( threep_jk, binNum, axis=1 )
+
+    twop_jk_avg = np.average( twop_jk, axis=1 )
+    twop_jk_err = fncs.calcError( twop_jk, binNum, axis=1 )
+
+    #print(threep_jk.shape)
 
     #########################
     # Calculate form factor #
@@ -216,7 +230,7 @@ for ts in tsink:
 
     emff_avg = np.average( emff, axis=1 )
 
-    emff_err = np.std( emff, axis=1 ) * float( binNum - 1 ) / math.sqrt( float( binNum ) )
+    emff_err = fncs.calcError( emff, binNum, axis=1 )
 
     ######################
     # Write output files #
@@ -231,8 +245,13 @@ for ts in tsink:
     # Form factors for each Q^2 and bin
 
     emff_avg_outFilename = output_template.replace( "*", "avgFpi_tsink" + str( ts ) )
-
     rw.writeAvgFormFactorFile( emff_avg_outFilename, Qsq, emff_avg, emff_err )
+
+    threep_jk_avg_outFilename = output_template.replace( "*", "threep_jk_tsink" + str( ts ) )
+    rw.writeAvgFormFactorFile( threep_jk_avg_outFilename, Qsq, threep_jk_avg, threep_jk_err )
+
+    twop_jk_avg_outFilename = output_template.replace( "*", "twop_jk_tsink" + str( ts ) )
+    rw.writeAvgFormFactorFile( twop_jk_avg_outFilename, Qsq, twop_jk_avg, twop_jk_err )
 
     # Fitted effective mass
 

@@ -150,15 +150,14 @@ def formFactorKinematic( ratio_err, mEff, Q, L, particle, formFactor ):
                                          * 2 * np.pi / L * Q[ q, 2 ], \
                                          -2 * Emm( mEff[ b ], Qsq, L )
                                          * 2 * np.pi / L * Q[ q, 2 ] ], \
-                                         [ 0, -2.0 * np.pi / L * Q[ q, 2 ] ], \
                                        [ 0.5 * ( 2 * np.pi / L ) ** 2 \
                                          * Q[ q, 0 ] * Q[ q, 1 ], \
                                          2 * ( 2 * np.pi / L ) ** 2 \
-                                         * Q[ q, 0 ] * Q[ q, 1 ] ] ] \
+                                         * Q[ q, 0 ] * Q[ q, 1 ] ], \
                                        [ 0.5 * ( 2 * np.pi / L ) ** 2 \
                                          * Q[ q, 0 ] * Q[ q, 2 ], \
                                          2 * ( 2 * np.pi / L ) ** 2 \
-                                         * Q[ q, 0 ] * Q[ q, 2 ] ] ] \
+                                         * Q[ q, 0 ] * Q[ q, 2 ] ],  \
                                        [ 0.5 * ( 2 * np.pi / L ) ** 2 \
                                          * Q[ q, 1 ] * Q[ q, 2 ], \
                                          2 * ( 2 * np.pi / L ) ** 2 \
@@ -169,16 +168,16 @@ def formFactorKinematic( ratio_err, mEff, Q, L, particle, formFactor ):
     return kineFactor
 
 
-def calc_gE_gM( decomp, ratio, ratio_err, Qsq_start, Qsq_end ):
+def decompFormFactors( decomp, ratio, ratio_err, Qsq_start, Qsq_end ):
 
     binNum = decomp.shape[ 0 ]
 
-    gE = np.zeros( ( binNum ) )
-    gM = np.zeros( ( binNum ) )
+    A = np.zeros( ( binNum ) )
+    B = np.zeros( ( binNum ) )
 
     for b in range( binNum ):
 
-        gE[ b ] = 2.0 * np.sum( decomp[ b, ..., 0 ] \
+        A[ b ] = np.sum( decomp[ b, ..., 0 ] \
                                 * ratio[ b, \
                                          Qsq_start \
                                          : Qsq_end + 1 ] \
@@ -186,7 +185,7 @@ def calc_gE_gM( decomp, ratio, ratio_err, Qsq_start, Qsq_end ):
                                              : Qsq_end \
                                              + 1 ] )
 
-        gM[ b ] = 2.0 * np.sum( decomp[ b, ..., 1 ] \
+        B[ b ] = np.sum( decomp[ b, ..., 1 ] \
                                 * ratio[ b, \
                                          Qsq_start \
                                          : Qsq_end + 1 ] \
@@ -194,7 +193,7 @@ def calc_gE_gM( decomp, ratio, ratio_err, Qsq_start, Qsq_end ):
                                              : Qsq_end \
                                              + 1 ] )
     
-    return gE, gM
+    return A, B
 
 
 def calc_GE_GM( gE, gM, mEff, Qsq, L ):
@@ -407,12 +406,12 @@ def calcEMFF( threep, twop, Qsq, mEff, tsink, L ):
 
             emff[ q, :, t ] = factor * threep[ q, :, t ] \
                               / twop[ 0, :, tsink ] \
-                             * np.sqrt( np.abs( twop[ q, :, tsink - t ] \
-                                                * twop[ 0, :, t ] \
-                                                * twop[ 0, :, tsink ] \
-                                                / ( twop[ 0, :, tsink - t ] \
-                                                    * twop[ q, :, t ] \
-                                                    * twop[ q, :, tsink ] ) ) )
+                              * np.sqrt( twop[ q, :, tsink - t ] \
+                                         * twop[ 0, :, t ] \
+                                         * twop[ 0, :, tsink ] \
+                                         / ( twop[ 0, :, tsink - t ] \
+                                             * twop[ q, :, t ] \
+                                             * twop[ q, :, tsink ] ) )
 
     return emff
 

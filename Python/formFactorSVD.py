@@ -10,6 +10,8 @@ import physQuants as pq
 import lqcdjk_fitting as fit
 from mpi4py import MPI
 
+a = 0.093
+
 particle_list = fncs.particleList()
 format_list = fncs.dataFormatList()
 form_factor_list = fncs.formFactorList()
@@ -35,10 +37,6 @@ parser.add_argument( "twop_dir", action='store', type=str )
 parser.add_argument( "twop_template", action='store', type=str )
 
 parser.add_argument( "mEff_fit_range_end", action='store', type=int )
-
-parser.add_argument( "ratio_fit_range_start", action='store', type=int )
-
-parser.add_argument( "ratio_fit_range_end", action='store', type=int )
 
 parser.add_argument( "particle", action='store', \
                      help="Particle to calculate form factor for. " \
@@ -105,11 +103,6 @@ twop_template = args.twop_template
 
 rangeEnd_mEff = args.mEff_fit_range_end
 
-# First and last points to fit ratios
-
-rangeStart_ratio = args.ratio_fit_range_start
-rangeEnd_ratio = args.ratio_fit_range_end
-
 # Info on what to analyze
 
 particle = args.particle
@@ -130,7 +123,11 @@ output_template = args.output_template
 
 dataFormat = args.data_format
 
+QFile = args.momentum_transfer_list
+
 momSq = args.threep_final_momentum_squared
+
+tsf = args.two_state_fit
 
 # Get configurations from given list or from given 
 # threep directory if list not given
@@ -307,7 +304,7 @@ Q_threep_template = "{0}{1}{2}".format( threep_tokens[0], \
 #mpi_fncs.mpiPrint(Q_threep_template,rank)
 
 Q, Qsq, Qsq_start, \
-    Qsq_end = rw.readAndProcessQList( args.momentum_transfer_list, \
+    Qsq_end = rw.readAndProcessQList( QFile, \
                                       twopDir, configList, \
                                       twop_template, \
                                       dataFormat )
@@ -329,7 +326,7 @@ twop_loc = rw.readTwopFile_Q( twopDir, configList_loc, twop_template, \
                               Q, Qsq, Qsq_start, Qsq_end, \
                               particle, dataFormat )
 
-#twop_loc = np.asarray( twop_loc, order='c' )
+twop_loc = np.asarray( twop_loc, order='c' )
 
 mpi_fncs.mpiPrint( "Read two-point functions from files " \
                    + "in {:.3} seconds".format( time.time() - t0 ), rank )
@@ -360,14 +357,19 @@ if binNum_loc:
                                                       binSize, \
                                                       bin_glob[ rank ] )
 
-    # twop_fold[ b, t ]
+    if particle == "nucleon":
 
+        mEff_loc = pq.mEff( twop_jk_loc[:,0,:] )
 
-    twop_fold = fncs.fold( twop_jk_loc[ :, 0, : ] )
+    else:
 
-    # mEff[ b, t ]
+        # twop_fold[ b, t ]
 
-    mEff_loc = pq.mEffFromSymTwop( twop_fold )
+        twop_fold = fncs.fold( twop_jk_loc[ :, 0, : ] )
+
+        # mEff[ b, t ]
+
+        mEff_loc = pq.mEffFromSymTwop( twop_fold )
 
 else:
 
@@ -382,7 +384,15 @@ else:
 if rank == 0:
 
     twop_jk = np.zeros( ( binNum_glob, QNum, T ) )
-    mEff = np.zeros( ( binNum_glob, T_fold ) )
+
+
+    if particle == "nucleon":
+
+        mEff = np.zeros( ( binNum_glob, T ) )
+
+    else:
+
+        mEff = np.zeros( ( binNum_glob, T_fold ) )
 
 else:
 
@@ -391,18 +401,23 @@ else:
 
 recvCount, recvOffset = mpi_fncs.recvCountOffset( procNum, binNum )
 
-#print(mEff.shape)
-#print(mEff_loc.shape)
-#print(recvCount)
-#print(recvOffset)
+if particle == "nucleon":
 
-#comm.Gatherv( twop_jk_loc, [ twop_jk, recvCount * QNum * T, \
-#                             recvOffset * QNum * T, MPI.DOUBLE ], root=0 )
-comm.Gatherv( mEff_loc, [ mEff, recvCount * T_fold, \
-                          recvOffset * T_fold, MPI.DOUBLE ], root=0 )
+    comm.Gatherv( mEff_loc, [ mEff, recvCount * T, \
+                              recvOffset * T, MPI.DOUBLE ], \
+                  root=0 )
 
-exit()
-#CJL: Up to HERE has been tested
+else:
+
+    comm.Gatherv( mEff_loc, [ mEff, recvCount * T_fold, \
+                              recvOffset * T_fold, MPI.DOUBLE ], \
+                  root=0 )
+
+comm.Gatherv( twop_jk_loc, [ twop_jk, recvCount * QNum * T, \
+                             recvOffset * QNum * T, \
+                             MPI.DOUBLE ], \
+              root=0 )
+
 if rank == 0:
 
     # mEff_avg[ t ]
@@ -417,108 +432,130 @@ if rank == 0:
 
     mEff_fit = np.zeros( binNum_glob )
 
-    # End loop over bins
+    if particle == "nucleon":
 
-    try:
-    
-        fitResults = fit.mEffTwopFit( mEff, twop_jk[ :, 0, : ], \
-                                      rangeEnd_mEff, 0, L, tsf )
-    
-    except fit.lqcdjk_BadFitError as error:
-        
-        mpi_fncs.mpiPrintErr( "ERROR (lqcdjk_fitting.mEffTwopFit):" \
-                              + str( error ), comm )
-
-    fitParams = fitResults[ 0 ]
-    chiSq = fitResults[ 1 ]
-    mEff_fit = fitResults[ 2 ]
-    rangeStart = fitResults[ 3 ]
-    rangeStart_mEff = fitResults[ 4 ]
-
-    curve = np.zeros( ( binNum_glob, 50 ) )
-
-    t_s = np.concatenate( ( np.linspace( rangeStart, \
-                                         rangeEnd_mEff, 25 ), \
-                            np.linspace( T - rangeEnd_mEff, \
-                                         T- rangeStart, 25 ) ) )
-                    
-    twopFit_str = "2s" + str( rangeStart ) \
-                  + ".2e" + str( rangeEnd_mEff )
-
-    if tsf:
-
-        c0 = fitParams[ :, 0 ]
-        c1 = fitParams[ :, 1 ]
-        E0 = fitParams[ :, 2 ]
-        E1 = fitParams[ :, 3 ]
-
-        # Calculate fitted curve
-
+        # Loop over bins
         for b in range( binNum_glob ):
+            
+            # Perform the plateau fit
 
-            for t in range( t_s.shape[ -1 ] ):
-                
-                curve[ b, t ] = fit.twoStateTwop( t_s[ t ], T, \
-                                                  c0[ b ], c1[ b ], \
-                                                  E0[ b ], E1[ b ] )
-                        
-            # End loop over tsink
+            rangeStart_mEff = 9
+
+            mEff_fit[ b ] = np.polyfit( range( rangeStart_mEff, \
+                                               rangeEnd_mEff + 1 ), \
+                                        mEff[ b, \
+                                              rangeStart_mEff \
+                                              : rangeEnd_mEff + 1 ], 0, \
+                                        w=mEff_err[ rangeStart_mEff \
+                                                    : rangeEnd_mEff + 1 ] )
+
         # End loop over bins
 
-        curveOutputFilename \
-            = output_template.replace( "*", \
-                                       "twop_twoStateFit_curve_" \
-                                       + twopFit_str )
-        chiSqOutputFilename \
-            = output_template.replace( "*", \
-                                       "twop_twoStateFit_chiSq_" \
-                                       + twopFit_str )
+    else:
 
-    else: # One-state fit
+        try:
 
-        G = fitParams[ :, 0 ]
-        E = fitParams[ :, 1 ]
-
-        # Calculate fitted curve
-
-        for b in range( binNum_glob ):
-
-            for t in range( t_s.shape[ -1 ] ):
-                
-                curve[ b, t ] = fit.oneStateTwop( t_s[ t ], T, \
-                                                  G[ b ], E[ b ] )
-                        
-            # End loop over tsink
-        # End loop over bins
-
-        curveOutputFilename \
-            = output_template.replace( "*", \
-                                       "twop_oneStateFit_curve_" \
-                                       + twopFit_str )
-        chiSqOutputFilename \
-            = output_template.replace( "*", \
-                                       "twop_oneStateFit_chiSq_" \
-                                       + twopFit_str )
-
-    # End if not two-state fit
-
-    curve_avg = np.average( curve, axis=0 )
-    curve_err = fncs.calcError( curve, binNum_glob )
+            fitResults = fit.mEffTwopFit( mEff, twop_jk[ :, 0, : ], \
+                                          rangeEnd_mEff, 0, L, tsf )
             
-    chiSq_avg = np.average( chiSq, axis=0 )
-    chiSq_err = fncs.calcError( chiSq, binNum_glob )
-            
-    # Write output files
-
-    rw.writeAvgDataFile_wX( curveOutputFilename, t_s, curve_avg, curve_err )
+        except fit.lqcdjk_BadFitError as error:
         
-    rw.writeFitDataFile( chiSqOutputFilename, chiSq_avg, \
-                         chiSq_err, rangeStart, rangeEnd_mEff )
+            mpi_fncs.mpiPrintErr( "ERROR (lqcdjk_fitting.mEffTwopFit):" \
+                                  + str( error ), comm )
+            
+        fitParams = fitResults[ 0 ]
+        chiSq = fitResults[ 1 ]
+        mEff_fit = fitResults[ 2 ]
+        rangeStart = fitResults[ 3 ]
+        rangeStart_mEff = fitResults[ 4 ]
+
+        curve = np.zeros( ( binNum_glob, 50 ) )
+
+        t_s = np.concatenate( ( np.linspace( rangeStart, \
+                                             rangeEnd_mEff, 25 ), \
+                                np.linspace( T - rangeEnd_mEff, \
+                                             T- rangeStart, 25 ) ) )
+            
+        twopFit_str = "2s" + str( rangeStart ) \
+                      + ".2e" + str( rangeEnd_mEff )
+        
+        if tsf:
+
+            c0 = fitParams[ :, 0 ]
+            c1 = fitParams[ :, 1 ]
+            E0 = fitParams[ :, 2 ]
+            E1 = fitParams[ :, 3 ]
+
+            # Calculate fitted curve
+
+            for b in range( binNum_glob ):
+                for t in range( t_s.shape[ -1 ] ):
+                
+                    curve[ b, t ] = fit.twoStateTwop( t_s[ t ], T, \
+                                                      c0[ b ], c1[ b ], \
+                                                      E0[ b ], E1[ b ] )
+                        
+                # End loop over tsink
+            # End loop over bins
+
+            curveOutputFilename \
+                = output_template.replace( "*", \
+                                           "twop_twoStateFit_curve_" \
+                                           + twopFit_str )
+            chiSqOutputFilename \
+                = output_template.replace( "*", \
+                                           "twop_twoStateFit_chiSq_" \
+                                           + twopFit_str )
+
+        else: # One-state fit
+
+            G = fitParams[ :, 0 ]
+            E = fitParams[ :, 1 ]
+
+            # Calculate fitted curve
+
+            for b in range( binNum_glob ):
+                for t in range( t_s.shape[ -1 ] ):
+                
+                    curve[ b, t ] = fit.oneStateTwop( t_s[ t ], T, \
+                                                      G[ b ], E[ b ] )
+                        
+                # End loop over tsink
+            # End loop over bins
+
+            curveOutputFilename \
+                = output_template.replace( "*", \
+                                           "twop_oneStateFit_curve_" \
+                                           + twopFit_str )
+            chiSqOutputFilename \
+                = output_template.replace( "*", \
+                                           "twop_oneStateFit_chiSq_" \
+                                           + twopFit_str )
+
+        # End if not two-state fit
+
+        curve_avg = np.average( curve, axis=0 )
+        curve_err = fncs.calcError( curve, binNum_glob )
+            
+        chiSq_avg = np.average( chiSq, axis=0 )
+        chiSq_err = fncs.calcError( chiSq, binNum_glob )
+            
+        # Write output files
+
+        rw.writeAvgDataFile_wX( curveOutputFilename, t_s, \
+                                curve_avg, curve_err )
+        
+        rw.writeFitDataFile( chiSqOutputFilename, chiSq_avg, \
+                             chiSq_err, rangeStart, rangeEnd_mEff )
+
+    # End if meson
 
     # mEff_fit_avg
-
+        
     mEff_fit_avg = np.average( mEff_fit, axis=0 )
     mEff_fit_err = fncs.calcError( mEff_fit, binNum_glob )
+        
+    Qsq_GeV = pq.convertQsqToGeV( Qsq, a * mEff_fit_avg, a, L )
 
     mEff_range_str = "2s" + str( rangeStart_mEff ) \
                      + ".2e" + str( rangeEnd_mEff )
@@ -613,117 +650,21 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
         t0_ts = time.time()
 
-        # threep_loc[ flav, proj, conf, Q, curr, t ]
+        # threep_loc[ flav, conf, Q, ratio, t ]
 
-        threep_loc = rw.readFormFactorFile( threepDir, configList_loc, \
-                                            threep_tokens, Qsq, QNum, \
-                                            ts, projector, \
-                                            finalMomList[ ip ], \
-                                            particle, dataFormat, formFactor )
+        threep_loc = rw.readFormFactorThreep( threepDir, configList_loc, \
+                                              threep_tokens, Qsq, \
+                                              Qsq_start, Qsq_end, \
+                                              QNum, ts, projector, \
+                                              finalMomList[ ip ], \
+                                              particle, dataFormat, \
+                                              formFactor, comm=comm )
 
         mpi_fncs.mpiPrint( "Read three-point functions from files " \
                            + "for tsink {} in {:.4}".format( ts, \
                                                              time.time() \
                                                              - t0_ts ) \
                            + " seconds.", rank )
-
-        if particle == "nucleon":
-
-            # Calculate isovector and isoscalar
-
-            threep_tmp = np.copy( threep_loc )
-
-            threep_loc[ 0 ] = 0.5 * ( threep_tmp[ 0 ] \
-                                      - threep_tmp[ 1 ] )
-            threep_loc[ 1 ] = 0.5 * ( threep_tmp[ 0 ] \
-                                      + threep_tmp[ 1 ] )
-
-        #mpi_fncs.mpiPrintAllRanks(threep_loc.shape, comm)
-
-        # Get the projection and insertion combinations we want
-        # threep_loc[ flav, proj, conf, Q, curr, t ]
-        # -> threep_loc[ flav, conf, Q, ratio, t ]
-
-        if formFactor = "EM":
-
-            if particle == "nucleon":
-
-                # ratio   ProjInsertion
-                # 0       P0g0
-                # 1       P0g1
-                # 2       P0g2
-                # 3       P0g3
-                # 4       P4g2
-                # 5       P4g3
-                # 6       P5g1
-                # 7       P5g3
-                # 8       P6g1
-                # 9       P6g2
-                
-                threep_loc = np.stack ( [ threep_loc[ :, 0, :, :, 0, : ].real, \
-                                          threep_loc[ :, 0, :, :, 1, : ].imag, \
-                                          threep_loc[ :, 0, :, :, 2, : ].imag, \
-                                          threep_loc[ :, 0, :, :, 3, : ].imag, \
-                                          threep_loc[ :, 1, :, :, 2, : ].real, \
-                                          threep_loc[ :, 1, :, :, 3, : ].real, \
-                                          threep_loc[ :, 2, :, :, 1, : ].real, \
-                                          threep_loc[ :, 2, :, :, 3, : ].real, \
-                                          threep_loc[ :, 3, :, :, 1, : ].real, \
-                                          threep_loc[ :, 3, :, :, 2, : ].real ], \
-                                        axis=3 )
-
-            else:
-
-            
-                # ratio   Insertion
-                # 0       g0
-                # 1       g1
-                # 2       g2
-                # 3       g3
-                
-                threep_loc = np.stack( [ threep_loc[ :, 0, :, :, \
-                                                     0, : ].real, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     1, : ].imag, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     2, : ].imag, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     3, : ].imag ], \
-                                       axis=3 )
-
-        elif formFactor == "1D":
-
-            if particle == "nucleon":
-
-                mpi_fncs.mpirPrintError( "CJL: I do not know this one.", \
-                                         comm )
-
-            else:
-
-                # ratio   Insertion
-                # 0       {g0D0}
-                # 1       {gxD0}
-                # 2       {gyD0}
-                # 3       {gzD0}
-                # 4       {gyDx}
-                # 5       {gzDx}
-                # 6       {gzDy}
-
-                threep_loc = np.stack( [ threep_loc[ :, 0, :, :, \
-                                                     0, : ].real, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     1, : ].imag, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     2, : ].imag, \
-                                         threep_loc[ :, 0, :, :, \
-                                                     3, : ].imag ], \
-                                         threep_loc[ :, 0, :, :, \
-                                                     4, : ].real ], \
-                                         threep_loc[ :, 0, :, :, \
-                                                     5, : ].real ], \
-                                         threep_loc[ :, 0, :, :, \
-                                                     6, : ].real ], \
-                                       axis=3 )
 
         # Loop over flavor
         for iflav in range( flavNum ):
@@ -791,8 +732,22 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                * ratioNum * threepTimeNum, \
                                MPI.DOUBLE ] )
 
+            ratio_avg = np.average( ratio, axis=0 )
             ratio_err = fncs.calcError( ratio, binNum_glob )
 
+            """
+            ff_outFilename = output_template.replace( "*", \
+                                                      particle + "_" \
+                                                      + flav_str[iflav] \
+                                                      + "_formFactor_" \
+                                                      + "tsink" \
+                                                      + str(ts) )
+
+            
+            
+            rw.writeAvgFormFactorFile( ff_outFilename, Q, \
+                                       ratio_avg[:,0,:], ratio_err[:,0,:] )
+            """    
             #mpi_fncs.mpiPrintAllRanks(ratio_err,comm)
 
             if binNum_loc:
@@ -801,14 +756,20 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
              
                 ratio_fit_loc=fit.fitGenFormFactor(ratio_loc, \
                                                    ratio_err, \
-                                                   rangeStart_ratio, \
-                                                   rangeEnd_ratio)
+                                                   ts // 2 - 2, \
+                                                   ts // 2 + 2)
 
             else: 
 
-                ratio_fit_loc = []
+                ratio_fit_loc = np.array( [] )
 
-            ratio_fit = np.zeros( ( binNum_glob, QNum, ratioNum ) )
+            if rank == 0:
+
+                ratio_fit = np.zeros( ( binNum_glob, QNum, ratioNum ) )
+
+            else:
+
+                ratio_fit = None
 
             comm.Gatherv( ratio_fit_loc, \
                           [ ratio_fit, \
@@ -816,12 +777,12 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                             recvOffset * QNum * ratioNum, \
                             MPI.DOUBLE ], root=0 )
 
-            # ratio_fit_err[ Q, ratio ]
-
-            ratio_fit_err = fncs.calcError( ratio_fit, binNum_glob )        
-            
             if rank == 0:
 
+                # ratio_fit_err[ Q, ratio ]
+
+                ratio_fit_err = fncs.calcError( ratio_fit, binNum_glob )        
+            
                 ###############################
                 # Calculate kinematic factors #
                 ###############################
@@ -838,19 +799,6 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                                      particle, formFactor )
 
                 #print(kineFactor[0])
-
-                # ratio_fit[ b, Q, ratio, [ A, B ] ]
-                # -> ratio_fit[ b, Q * ratio, [ A, B ] ]
-
-                ratio_fit = ratio_fit.reshape( binNum_glob, \
-                                               QsqNum * ratioNum )
-
-                # ratio_fit_err[ Q, ratio ]
-                # -> ratio_fit_err[ b, Q * ratio ]
-
-                ratio_fit_err = ratio_fit_err.reshape( QsqNum * ratioNum )
-                ratio_fit_err = np.array( [ ratio_fit_err \
-                                            for b in range( binNum_glob ) ] )
 
                 # For EM form factor:
                 # A = GE, B = GM
@@ -911,21 +859,20 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                     # End loop over bins
 
                     # decomp = ( u s v^T )^-1
-                    # decomp[ b, [ A, B ], Q * ratio ]
+                    # decomp[ b, Q, ratio, [ A, B ] ]
 
-                    decomp= v @ smat_inv @ uT                    
+                    decomp= np.transpose( v @ smat_inv @ uT, \
+                                          (0,2,1) ).reshape( binNum_glob,\
+                                                             Qsq_end[qsq]\
+                                                             -Qsq_start[qsq]\
+                                                             + 1, \
+                                                             ratioNum, 2 )
 
-                    A[ qsq ] = ( decomp[ :, 0, : ] \
-                                 @ ratio_fit[ Qsq_start[ qsq ] \
-                                              : Qsq_end[ qsq ] + 1 ] ) \
-                        * ratio_fit_err[ :, Qsq_start[ qsq ]
-                                         : Qsq_end[ qsq ] + 1 ]
-
-                    B[ qsq ] = ( decomp[ :, 1, : ] \
-                                 @ ratio_fit[ Qsq_start[ qsq ] \
-                                              : Qsq_end[ qsq ] + 1 ] ) \
-                        * ratio_fit_err[ :, Qsq_start[ qsq ]
-                                         : Qsq_end[ qsq ] + 1 ]
+                    A[qsq], B[qsq] = pq.decompFormFactors( decomp, \
+                                                           ratio_fit, \
+                                                           ratio_fit_err, \
+                                                           Qsq_start[ qsq ], \
+                                                           Qsq_end[ qsq ] )
 
                 # End loop over Q^2
 
@@ -955,7 +902,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                                            + "_" + ff_str[ 0 ]\
                                                            + "_tsink" \
                                                            + str( ts ) )
-                rw.writeAvgDataFile_wX( output_filename, Qsq, \
+                rw.writeAvgDataFile_wX( output_filename, Qsq_GeV, \
                                            A_avg, A_err )
 
                 output_filename = output_template.replace( "*", \
@@ -964,7 +911,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                                            + "_" + ff_str[ 1 ]\
                                                            + "_tsink" \
                                                            + str( ts ) )
-                rw.writeAvgDataFile_wX( output_filename, Qsq, \
+                rw.writeAvgDataFile_wX( output_filename, Qsq_GeV, \
                                            B_avg, B_err )
 
             # End if first process

@@ -187,7 +187,7 @@ def getDatasets( configDir, configList, fn_template, *keyword, **kwargs ):
 
     if "dsetname" in kwargs:
 
-        dsetname = [ [ [ kwargs[ "dsetname" ] ] \
+        dsetname = [ [ kwargs[ "dsetname" ] \
                        for fn in range( len( filename[ c ] ) ) ] \
                      for c in range( configNum ) ]
 
@@ -357,7 +357,7 @@ def readAndProcessQList( QFile, twopDir, configList, \
  
     if QFile:
 
-        Q = readTxtFile( args.momentum_transfer_list, dtype=int )
+        Q = readTxtFile( QFile, dtype=int )
 
         if dataFormat == "ASCII":
         
@@ -399,14 +399,14 @@ def readTwopFile_Q( twopDir, configList, twop_template, \
                     Q, Qsq, Qsq_start, Qsq_end, \
                     particle, dataFormat ):
 
-    if dataFormat == "cpu":
+    QNum = len( Q )
+    QsqNum = len( Qsq )
 
-        QNum = len( Q )
-        QsqNum = len( Qsq )
+    if dataFormat == "cpu":
 
         template = "/twop_{0}/ave16/msq{1:0>4}/arr"
 
-        dataset = template.format( particle, 0 )
+        dataset = [ template.format( particle, 0 ) ]
 
         twop0 = getDatasets( twopDir, configList, twop_template, \
                              dsetname=dataset )[:, 0, 0, ... ]
@@ -418,9 +418,9 @@ def readTwopFile_Q( twopDir, configList, twop_template, \
 
         twop[ :, 0, : ] = twop0[ :, 0, : ]
 
-        for iqsq in range( QsqNum ):
+        for iqsq in range( 1, QsqNum ):
 
-            dataset = template.format( particle, Qsq[ iqsq ] )
+            dataset = [ template.format( particle, Qsq[ iqsq ] ) ]
 
             twop_tmp = getDatasets( twopDir, \
                                     configList, \
@@ -429,7 +429,7 @@ def readTwopFile_Q( twopDir, configList, twop_template, \
 
             twop[ :, Qsq_start[ iqsq ]: \
                   Qsq_end[ iqsq ] + 1, : ] = np.moveaxis( twop_tmp, \
-                                                       -1, -2 )
+                                                          -1, -2 )
 
     elif dataFormat == "ASCII":
 
@@ -801,8 +801,9 @@ def readAvgXFile( threepDir, configList, threep_tokens,
                 exit()                
 
 
-def readFF_cpu( threepDir, configList, threep_template, Qsq, ts, proj, \
-                  particle, formFactor, **kwargs ):
+def readFF_cpu( threepDir, configList, threep_template, Qsq, \
+                Qsq_start, Qsq_end, QNum, ts, proj, particle, \
+                flavor, formFactor, **kwargs ):
 
     QsqNum = len( Qsq )
 
@@ -830,54 +831,71 @@ def readFF_cpu( threepDir, configList, threep_template, Qsq, ts, proj, \
 
     # Set data set names
 
-    dsetname = [ "" for qc in range( QsqNum * insertionNum ) ]
+    if particle == "nucleon":
+
+        template = "/thrp/ave16/P{0}/dt{1}/{2}/{3}/msq{4:0>4}/arr"
                 
+        dsetname = [ template.format( proj, ts, flavor,\
+                                      insertionCurrent[0], 0 ) ]
+    else:
+
+        template = "/thrp/ave16/dt{0}/{1}/{2}/msq{3:0>4}/arr"
+
+        dsetname = [ template.format( ts, flavor,\
+                                      insertionCurrent[0], 0 ) ]
+
+    threep0 = getDatasets( threepDir, configList, threep_template, \
+                           dsetname=dsetname )[ :, 0, 0, ... ]
+
+    threep = np.zeros( ( len( configList ), QNum, insertionNum, \
+                         threep0.shape[ -2 ] ), dtype=complex )
+
+    dsetname = [ "" for c in range( insertionNum ) ]
+    
     # Loop over Qsq
     for qsq, iqsq in zip( Qsq, range( QsqNum ) ):
+
         # Loop over insertion current
         for c, ic in zip( insertionCurrent, range( insertionNum ) ):
             
             if particle == "nucleon":
 
-                template = "/thrp/ave16/P{}/dt{}/{}/{}/msq{:.4}/arr"
-                    
-                dsetname[ iqsq * QsqNum + ic ] = template.format( proj, \
-                                                                  ts, \
-                                                                  flav, \
-                                                                  c, Qsq )
+                dsetname[ ic ] = template.format( proj, \
+                                                  ts, \
+                                                  flavor,\
+                                                  c, qsq )
 
             else:
 
-                template = "/thrp/ave16/dt{}/{}/{}/msq{:.4}/arr"
-                    
-                dsetname[ iqsq * QsqNum + ic ] = template.format( ts, \
-                                                                  flav, \
-                                                                  c, Qsq )
+                dsetname[ ic ] = template.format( ts, \
+                                                  flavor,\
+                                                  c, qsq )
 
         # End loop over insertion current
+
+        # Read three-point files
+        # threep_tmp[ conf, curr, t, Q_qsq ]
+
+        threep_tmp = getDatasets( threepDir, \
+                                  configList, \
+                                  threep_template, \
+                                  dsetname=dsetname )[ :, 0, ... ]
+
+        # threep[ conf, Q, curr, t ]
+
+        threep[ :, Qsq_start[ iqsq ]: \
+                Qsq_end[ iqsq ] + 1, ... ] = np.moveaxis( threep_tmp, 3, 1 )
+
     # End loop over Qsq
 
-    # Read three-point files
-    # threep[ conf, Qsq*curr, t ]
-
-    threep = getDatasets( threepDir, \
-                          configList, \
-                          threep_template, \
-                          dsetname=dsetname )[:,0,:,:,0]
-
-    # Reshape threep[ conf, Qsq*curr, t ] 
-    # -> threep[ conf, Qsq, curr, t ]
-    
-    threep = threep.reshape( threep.shape[ 0 ], QsqNum, \
-                             insertionNum, threep.shape[ -1 ] )
-                        
     if formFactor == "1D":
         
         # threep_tmp[ conf, Qsq, curr, t ]
 
         threep_tmp = np.zeros( threep.shape[ :2 ] \
                                + ( threep.shape[ 2 ] - 3, \
-                                   threep.shape[-1] ) )
+                                   threep.shape[-1] ), \
+                               dtype=complex )
 
         # 1st current is g0D0 - 1/4( g0D0 + gxDx + gyDy + gzDz )
 
@@ -934,8 +952,9 @@ def readFF_ASCII( threepDir, configList, threep_template, \
     return threep
 
 
-def readFormFactorThreep( threepDir, configList, threep_tokens, Qsq, QNum, \
-                          ts, proj, momBoost, particle, dataFormat, \
+def readFormFactorThreep( threepDir, configList, threep_tokens, \
+                          Qsq, Qsq_start, Qsq_end, QNum, ts, proj, \
+                          momBoost, particle, dataFormat, \
                           formFactor, **kwargs ):
 
     flavor, flavorNum = fncs.setFlavorStrings( particle, dataFormat )
@@ -966,9 +985,11 @@ def readFormFactorThreep( threepDir, configList, threep_tokens, Qsq, QNum, \
                 threep[ iflav ][ ip ] = readFF_cpu( threepDir, \
                                                     configList, \
                                                     threep_template, \
-                                                    Qsq, ts, p, particle, \
-                                                    formFactor, **kwargs )
-
+                                                    Qsq, Qsq_start, \
+                                                    Qsq_end, QNum, ts, \
+                                                    p, particle, flav, \
+                                                    formFactor, \
+                                                    **kwargs )
 
             elif dataFormat == "gpu":
 
@@ -989,15 +1010,98 @@ def readFormFactorThreep( threepDir, configList, threep_tokens, Qsq, QNum, \
                                                    threep_tokens[2], \
                                                    flav, formFactor )
 
-                #print(threep_template)
-
                 threep[ iflav ][ ip ] = readFF_ASCII( threepDir, \
-                                                        configList, \
-                                                        threep_template, \
-                                                        QNum, 4, **kwargs )
+                                                      configList, \
+                                                      threep_template, \
+                                                      QNum, 4, formFactor, \
+                                                      **kwargs )
 
         # End loop over projection
     # End loop over flavor
+
+    threep = np.array( threep )
+
+    if particle == "nucleon":
+
+        # Calculate isovector and isoscalar
+
+        threep_tmp = np.copy( threep )
+
+        threep[ 0 ] = ( threep_tmp[ 0 ] \
+                        - threep_tmp[ 1 ] )
+        threep[ 1 ] = ( threep_tmp[ 0 ] \
+                        + threep_tmp[ 1 ] )
+
+    # Get the projection and insertion combinations we want
+    # threep[ flav, proj, conf, Q, curr, t ]
+    # -> threep[ flav, conf, Q, ratio, t ]
+    
+    if formFactor == "EM":
+
+        if particle == "nucleon":
+
+            # ratio   ProjInsertion
+            # 0       P0g0
+            # 1       P0g1
+            # 2       P0g2
+            # 3       P0g3
+            # 4       P4g2
+            # 5       P4g3
+            # 6       P5g1
+            # 7       P5g3
+            # 8       P6g1
+            # 9       P6g2
+                
+            threep = np.stack ( [ threep[ :, 0, :, :, 0, : ].real, \
+                                  threep[ :, 0, :, :, 1, : ].imag, \
+                                  threep[ :, 0, :, :, 2, : ].imag, \
+                                  threep[ :, 0, :, :, 3, : ].imag, \
+                                  threep[ :, 1, :, :, 2, : ].real, \
+                                  threep[ :, 1, :, :, 3, : ].real, \
+                                  threep[ :, 2, :, :, 1, : ].real, \
+                                  threep[ :, 2, :, :, 3, : ].real, \
+                                  threep[ :, 3, :, :, 1, : ].real, \
+                                  threep[ :, 3, :, :, 2, : ].real], \
+                                axis=3 )
+            
+        else:
+
+            print( "Meson EM form factor not supported." )
+            return -1
+
+    elif formFactor == "1D":
+
+        if particle == "nucleon":
+
+            print( "Nucleon 1D generalized form factor not supported." )
+            return -1
+
+        else:
+
+            # ratio   Insertion
+            # 0       {g0D0}
+            # 1       {gxD0}
+            # 2       {gyD0}
+            # 3       {gzD0}
+            # 4       {gyDx}
+            # 5       {gzDx}
+            # 6       {gzDy}
+
+            threep = np.stack( [ threep[ :, 0, :, :, \
+                                         0, : ].real, \
+                                 threep[ :, 0, :, :, \
+                                         1, : ].imag, \
+                                 threep[ :, 0, :, :, \
+                                         2, : ].imag, \
+                                 threep[ :, 0, :, :, \
+                                         3, : ].imag, \
+                                 threep[ :, 0, :, :, \
+                                         4, : ].real, \
+                                 threep[ :, 0, :, :, \
+                                         5, : ].real, \
+                                 threep[ :, 0, :, :, \
+                                         6, : ].real ], \
+                               axis=3 )
 
     return np.array( threep )
 

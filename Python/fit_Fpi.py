@@ -7,7 +7,8 @@ import functions as fncs
 import physQuants as pq
 import readWrite as rw
 
-latticeSpacing = 0.098
+latticeSpacing = 0.093
+latticeDim = 32
 
 #########################
 # Parse input arguments #
@@ -16,6 +17,8 @@ latticeSpacing = 0.098
 parser = argp.ArgumentParser( description="Electromagnetic Form Factor" )
 
 parser.add_argument( "Fpi_filename", action='store', type=str )
+
+parser.add_argument( "mEff_filename", action='store', type=str )
 
 parser.add_argument( "fit_start", action='store', type=int )
 
@@ -45,7 +48,11 @@ QsqNum = Qsq.shape[ 0 ]
 
 Fpi = rw.readFormFactorFile( Fpi_filename, QsqNum, binNum, timestepNum )
 
-print "Read effective masses from data file"
+# mEff
+
+mEff = rw.readNthDataCol( args.mEff_filename, 0 )
+
+print( "Read data files" )
 
 # Fpi_err[ q, t ]
 
@@ -82,10 +89,16 @@ Fpi_fit_avg = np.average( Fpi_fit, axis=1 )
 Fpi_fit_err = np.std( Fpi_fit, axis=1 ) * float( binNum - 1 ) / math.sqrt( float( binNum ) )
 
 ######################
+# Convert Q^2 to GeV #
+######################
+
+Qsq_GeV = pq.convertQsqToGeV( Qsq, latticeSpacing * mEff, latticeSpacing, latticeDim )
+
+######################
 # Write output files #
 ######################
 
 # Fitted effective mass
 
-rw.writeAvgDataFile_wX( output, Qsq, Fpi_fit_avg, Fpi_fit_err )
+rw.writeAvgDataFile_wX( output, Qsq_GeV, Fpi_fit_avg, Fpi_fit_err )
 

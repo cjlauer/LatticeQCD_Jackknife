@@ -355,6 +355,7 @@ if binNum_loc:
         twop_jk_loc[:,q,:] = fncs.jackknifeBinSubset( twop[:,q,:], \
                                                       binSize, \
                                                       bin_glob[ rank ] )
+
     mEff_loc = pq.mEff( twop_jk_loc[:,0,:] )
 
 else:
@@ -608,11 +609,11 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
         # threep_loc[ flav, proj, conf, Q, curr, t ]
 
-        threep_loc = rw.readFormFacttorThreep( threepDir, configList_loc, \
-                                               threep_tokens, Qsq, QNum, \
-                                               ts, projector, \
-                                               finalMomList[ ip ], \
-                                               particle, dataFormat, "EM" )
+        threep_loc = rw.readFormFactorThreep( threepDir, configList_loc, \
+                                              threep_tokens, Qsq, QNum, \
+                                              ts, projector, \
+                                              finalMomList[ ip ], \
+                                              particle, dataFormat, "EM" )
 
         mpi_fncs.mpiPrint( "Read three-point functions from files " \
                            + "for tsink {} in {:.4}".format( ts, \
@@ -837,7 +838,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                         smat_inv[ b ] = np.linalg.pinv( smat )
 
                     # End loop over bins
-
+                    
                     #print("S")
                     #print(smat)
                     #print("S^-1")
@@ -845,8 +846,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
 
                     # decomp[ b, Q, ratio, [ GE, GM ] ]
 
-                    decomp=np.transpose(v@smat_inv@uT, \
-                                         (0,2,1))
+                    decomp=np.transpose(v @ (smat_inv @ uT),(0,2,1))
                     
                     decomp = decomp.reshape(binNum_glob, \
                                             Qsq_end[ qsq ] \
@@ -854,11 +854,11 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                             + 1, \
                                             ratioNum,2)
 
-                    gE[ qsq ], gM[ qsq ]  = pq.calc_gE_gM( decomp, \
-                                                           ratio_fit, \
-                                                           ratio_fit_err, \
-                                                           Qsq_start[ qsq ],\
-                                                           Qsq_end[ qsq ] )
+                    gE[qsq], gM[qsq]  = pq.decompFormFactors( decomp, \
+                                                              ratio_fit, \
+                                                              ratio_fit_err,\
+                                                              Qsq_start[qsq],\
+                                                              Qsq_end[qsq] )
                     
                 # End loop over Q^2
 
