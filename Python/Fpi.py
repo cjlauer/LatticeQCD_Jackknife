@@ -72,7 +72,7 @@ configNum = len( configList )
 
 # Set timestep and bin number from effective mass file
 
-timestepNum, binNum = rw.detTimestepAndConfigNum( mEff_filename )
+T_fold, binNum = rw.detTimestepAndConfigNum( mEff_filename )
 
 if configNum % binNum != 0:
 
@@ -90,7 +90,7 @@ binSize = configNum // binNum
 
 # mEff[ b, t ]
 
-mEff = rw.readDataFile( mEff_filename, binNum, timestepNum )
+mEff = rw.readDataFile( mEff_filename, binNum, T_fold )
 
 # mEff_err[ t ]
 
@@ -122,13 +122,21 @@ mEff_fit_err = np.std( mEff_fit ) * float( binNum - 1 ) / math.sqrt( float( binN
 ################
 
 # Read momenta list from dataset
-# momList[ c, Q ]
+# Q[ c, Q ]
 
-momList = rw.getDatasets( threepDir, configList, threep_template, "Momenta_list" )[ :, 0, 0, ... ]
+Q = rw.getDatasets( threepDir, configList, threep_template, "Momenta_list" )[ :, 0, 0, ... ]
+
+QNum = Q.shape[1]
 
 # Check that momenta agree across configurations
 
-Qsq, Qsq_start, Qsq_end = fncs.processMomList( momList )
+Qsq, Qsq_start, Qsq_end = fncs.processMomList( Q )
+
+#print( Qsq, Qsq_start, Qsq_end )
+
+QsqNum = len( Qsq )
+
+#print(QsqNum)
 
 #print( Qsq )
 #print( Qsq_start )
@@ -145,27 +153,36 @@ twop = rw.getDatasets( twopDir, configList, twop_template, "twop" )[ :, 0, 0, ..
 
 print( "Read two-point functions from HDF5 files" )
 
-#print( twop.shape )
+print(twop.shape)
+
+T = twop.shape[ 1 ]
 
 # Average over equal Q^2
-# twop_avg[ Q^2, c, t ]
+# twop_avg[ Q^2, b, t ]
 
 twop_avg = fncs.averageOverQsq( twop, Qsq_start, Qsq_end )
 
 # Jackknife
-# twop_jk[ Q^2, b, t ]
+# twop_jk[ b, t, Q ]
 
-twop_jk = []
+#twop_jk = np.zeros( ( binNum, T, QNum ) )
+twop_jk = np.zeros( ( QsqNum, binNum, T ) )
 
-for q in range( twop_avg.shape[ 0 ] ):
+for q in range( QsqNum ):
 
-    twop_jk.append( fncs.jackknife( twop_avg[ q, ... ], binSize ) )
+    twop_jk[ q, ... ] = fncs.jackknife( twop_avg[ q, ... ], binSize )
+    
+#for q in range( QNum ):
 
-    #print( fncs.calcError( twop_jk[-1], binNum ) )
+#    twop_jk[ ..., q ] = fncs.jackknife( twop[ ..., q ], binSize )
 
-twop_jk = np.array( twop_jk )
+#twop_jk = np.moveaxis( twop_jk, -1, 1 )
 
-#print( twop_jk.shape )
+#twop_avg = np.average( twop_jk, axis=1 )
+#twop_err = fncs.calcError( twop_jk, binNum, axis=1 )
+
+#twop_jk_avg_outFilename = output_template.replace( "*", "twop" )
+#rw.writeAvgFormFactorFile( twop_jk_avg_outFilename, Qsq, twop_avg, twop_err )
 
 for ts in tsink:
     
@@ -182,42 +199,49 @@ for ts in tsink:
                              "noether", \
                              "threep" )[ :, 0, 0, ..., 3, 0 ]
 
-    print(threep.shape)
+    #print(threep.shape)
 
     print( "Read three-point functions from HDF5 files for tsink " \
            + str( ts ) )
 
+
     # Average over equal Q^2
     # threep_avg[ Q^2, c, t ]
     
+    #threep_avg = fncs.averageOverQsq( threep_jk, Qsq_start, Qsq_end )
     threep_avg = fncs.averageOverQsq( threep, Qsq_start, Qsq_end )
 
     # Jackknife
-    # threep_jk[ Q^2, b, t ]
+    # threep_jk[ b, t, Q ]
     
-    threep_jk = []
+    threep_jk = np.zeros( ( QsqNum, binNum, ts+1 ) )
 
-    for q in range( threep_avg.shape[ 0 ] ):
+    for q in range( QsqNum ):
 
-        threep_jk.append( fncs.jackknife( threep_avg[ q, ... ], \
-                                          binSize ) )
+        threep_jk[ q, ... ] = fncs.jackknife( threep_avg[ q, ... ], \
+                                              binSize )
 
-        #print(fncs.calcError(threep_jk[-1],binNum))
+    #threep_jk = np.zeros( ( binNum, ts+1, QNum ) )
 
-    threep_jk = np.array( threep_jk )
+    #for q in range( QNum ):
 
-    threep_jk_avg = np.average( threep_jk, axis=1 )
-    threep_jk_err = fncs.calcError( threep_jk, binNum, axis=1 )
+    #    threep_jk[ ..., q ] = fncs.jackknife( threep[ ..., q ], \
+    #                                      binSize )
 
-    twop_jk_avg = np.average( twop_jk, axis=1 )
-    twop_jk_err = fncs.calcError( twop_jk, binNum, axis=1 )
+    #threep_jk_avg = np.average( threep_jk, axis=1 )
+    #threep_jk_err = fncs.calcError( threep_jk, binNum, axis=1 )
+    
+    #print(threep_jk_avg.shape)
 
-    #print(threep_jk.shape)
+    #twop_jk_avg = np.average( twop_jk, axis=1 )
+    #twop_jk_err = fncs.calcError( twop_jk, binNum, axis=1 )
 
     #########################
     # Calculate form factor #
     #########################
 
+    #emff = pq.calcEMFF( threep_avg, twop_avg, Qsq, \
+    #                    mEff_fit, ts, latticeDim )
     emff = pq.calcEMFF( threep_jk, twop_jk, Qsq, \
                         mEff_fit, ts, latticeDim )
 
@@ -247,11 +271,8 @@ for ts in tsink:
     emff_avg_outFilename = output_template.replace( "*", "avgFpi_tsink" + str( ts ) )
     rw.writeAvgFormFactorFile( emff_avg_outFilename, Qsq, emff_avg, emff_err )
 
-    threep_jk_avg_outFilename = output_template.replace( "*", "threep_jk_tsink" + str( ts ) )
-    rw.writeAvgFormFactorFile( threep_jk_avg_outFilename, Qsq, threep_jk_avg, threep_jk_err )
-
-    twop_jk_avg_outFilename = output_template.replace( "*", "twop_jk_tsink" + str( ts ) )
-    rw.writeAvgFormFactorFile( twop_jk_avg_outFilename, Qsq, twop_jk_avg, twop_jk_err )
+    #threep_jk_avg_outFilename = output_template.replace( "*", "threep_jk_tsink" + str( ts ) )
+    #rw.writeAvgFormFactorFile( threep_jk_avg_outFilename, Qsq, threep_jk_avg, threep_jk_err )
 
     # Fitted effective mass
 

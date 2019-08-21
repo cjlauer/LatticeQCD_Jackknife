@@ -1,0 +1,17 @@
+import functions as fncs
+import numpy as np
+
+binSize = 1
+
+a = np.array( range(48) ).reshape( 4, 6, 2 )
+
+a_jk = np.zeros( ( 4, 6 // binSize, 2 ) )
+
+a_jk = fncs.jackknife( a, binSize )
+
+for q in range( 4 ):
+
+    a_jk[ q ] = fncs.jackknifeBinSubset( a[ q ], binSize, range(3) )
+
+print( a )
+print( a_jk )

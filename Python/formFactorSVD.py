@@ -10,8 +10,6 @@ import physQuants as pq
 import lqcdjk_fitting as fit
 from mpi4py import MPI
 
-a = 0.093
-
 particle_list = fncs.particleList()
 format_list = fncs.dataFormatList()
 form_factor_list = fncs.formFactorList()
@@ -54,6 +52,9 @@ parser.add_argument( 't_sink', action='store', \
 
 parser.add_argument( "L", \
                      action='store', type=int )
+
+parser.add_argument( "lattice_spacing", \
+                     action='store', type=float )
 
 parser.add_argument( "threep_final_momentum_squared", \
                      action='store', type=int )
@@ -116,6 +117,7 @@ ts_range_str = "tsink" + str(tsink[0]) + "_" + str(tsink[-1])
 # Other info
 
 L = args.L
+a = args.lattice_spacing
 
 binSize = args.binSize
 
@@ -439,7 +441,7 @@ if rank == 0:
             
             # Perform the plateau fit
 
-            rangeStart_mEff = 9
+            rangeStart_mEff = 13
 
             mEff_fit[ b ] = np.polyfit( range( rangeStart_mEff, \
                                                rangeEnd_mEff + 1 ), \
@@ -658,7 +660,7 @@ for ts, its in zip( tsink, range( tsinkNum ) ) :
                                               QNum, ts, projector, \
                                               finalMomList[ ip ], \
                                               particle, dataFormat, \
-                                              formFactor, comm=comm )
+                                              formFactor )
 
         mpi_fncs.mpiPrint( "Read three-point functions from files " \
                            + "for tsink {} in {:.4}".format( ts, \

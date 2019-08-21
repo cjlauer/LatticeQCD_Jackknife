@@ -195,6 +195,8 @@ def getDatasets( configDir, configList, fn_template, *keyword, **kwargs ):
 
         dsetname = getDatasetNames( filename, *keyword )
 
+    print(dsetname)
+
     data = fncs.initEmptyList( dsetname, 3 )
 
     # Loop over config indices
@@ -387,8 +389,8 @@ def readAndProcessQList( QFile, twopDir, configList, \
 
         elif dataFormat == "ASCII":
 
-            mpi_fncs.mpiPrintError( "ERROR: ASCII format requires a " \
-                                    + "momentum list to be given.", comm )
+            mpi_fncs.mpiPrintErr( "ERROR: ASCII format requires a " \
+                                  + "momentum list to be given.", comm )
 
     Qsq, Qsq_start, Qsq_end = fncs.processMomList( Q )
 
@@ -1120,7 +1122,8 @@ def getTxtData( configDir, configList, fn_template, **kwargs ):
     # Loop over config indices
     for c in range( configNum ):
         
-        filename = configDir + fn_template.replace( "*", configList[ c ] )
+        filename = configDir + "/" \
+                   + fn_template.replace( "*", configList[ c ] )
 
         # Get data
 

@@ -378,7 +378,7 @@ def calcRatio_Q( threep, twop, tsink ):
                                                   * twop[ ..., 0, tsink ] \
                                                   / ( twop[ ..., 0, tsink - t ] \
                                                       * twop[ ..., q, t ] \
-                                                      * twop[ ..., q, tsink ] ) ) )  
+                                                      * twop[ ..., q, tsink ] ) ) )
 
     return ratio
 
@@ -389,7 +389,7 @@ def calcRatio_Q( threep, twop, tsink ):
 def calcEMFF( threep, twop, Qsq, mEff, tsink, L ):
 
     # threep[ q, b, t ]
-    # twopp[ q, b, t ]
+    # twop[ q, b, t ]
     # Qsq[ q ]
     # mEff[ b ]
     # tsink
@@ -399,10 +399,12 @@ def calcEMFF( threep, twop, Qsq, mEff, tsink, L ):
 
     for q in range( threep.shape[ 0 ] ):
 
-        factor = 0.25 * np.sqrt( energy( mEff, Qsq[ q ], L ) / mEff ) \
-                 / ( energy( mEff, Qsq[ q ], L ) + mEff )
+        factor = 1.0
 
-        for t in range( threep.shape[ 2 ] ):
+        #factor = 1 / C1( mEff, Qsq[ q ], L ) \
+        #         / ( energy( mEff, Qsq[ q ], L ) + mEff )
+
+        for t in range( threep.shape[ -1 ] ):
 
             emff[ q, :, t ] = factor * threep[ q, :, t ] \
                               / twop[ 0, :, tsink ] \
