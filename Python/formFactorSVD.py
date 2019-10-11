@@ -294,7 +294,7 @@ finalMomList = -1 * finalMomList
 finalMomNum = len( finalMomList )
 
 # Momentum list
-
+"""
 Q_threep_template = "{0}{1}{2}".format( threep_tokens[0], \
                                         tsink[0], \
                                         threep_tokens[1] ) \
@@ -302,7 +302,7 @@ Q_threep_template = "{0}{1}{2}".format( threep_tokens[0], \
                                             finalMomList[0,1],\
                                             finalMomList[0,2],\
                                             flav_str[0] )
-
+"""
 #mpi_fncs.mpiPrint(Q_threep_template,rank)
 
 Q, Qsq, Qsq_start, \
@@ -443,13 +443,9 @@ if rank == 0:
 
             rangeStart_mEff = 13
 
-            mEff_fit[ b ] = np.polyfit( range( rangeStart_mEff, \
-                                               rangeEnd_mEff + 1 ), \
-                                        mEff[ b, \
-                                              rangeStart_mEff \
-                                              : rangeEnd_mEff + 1 ], 0, \
-                                        w=mEff_err[ rangeStart_mEff \
-                                                    : rangeEnd_mEff + 1 ] )
+            mEff_fit[ b ] = fit.fitPlateau( mEff, mEff_err, \
+                                            rangeStart_mEff, \
+                                            rangeEnd_mEff )
 
         # End loop over bins
 
@@ -457,8 +453,11 @@ if rank == 0:
 
         try:
 
-            fitResults = fit.mEffTwopFit( mEff, twop_jk[ :, 0, : ], \
-                                          rangeEnd_mEff, 0, L, tsf )
+            fitResults = fit.mEffTwopFit( mEff, twop_fold, \
+                                          rangeEnd_mEff, 0, L, tsf, \
+                                          mEff_t_low_range=[12], \
+                                          twop_t_low_range=[3], \
+                                          checkFit=False )
             
         except fit.lqcdjk_BadFitError as error:
         

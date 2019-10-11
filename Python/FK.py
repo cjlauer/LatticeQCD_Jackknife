@@ -9,7 +9,7 @@ import physQuants as pq
 
 Zv = 0.728
 
-latticeSpacing = 0.098
+latticeSpacing = 0.093
 
 latticeDim = 32
 

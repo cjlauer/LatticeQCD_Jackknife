@@ -195,8 +195,6 @@ def getDatasets( configDir, configList, fn_template, *keyword, **kwargs ):
 
         dsetname = getDatasetNames( filename, *keyword )
 
-    print(dsetname)
-
     data = fncs.initEmptyList( dsetname, 3 )
 
     # Loop over config indices
@@ -369,12 +367,8 @@ def readAndProcessQList( QFile, twopDir, configList, \
 
         if dataFormat == "gpu":
 
-            mpi_fncs.mpiPrint( "No momentum list given, will read " \
-                               + "momenta from three-point function " \
-                               + "files", rank )
-            
             Q = getDatasets( twopDir, configList, twop_template, \
-                                "Momenta_list" )[ :, 0, 0, ... ]
+                                "Momenta_list" )[ 0, 0, 0, ... ]
 
         elif dataFormat == "cpu":
 
@@ -907,6 +901,8 @@ def readFF_cpu( threepDir, configList, threep_template, Qsq, \
                                              + threep[ ..., 2, : ] \
                                              + threep[ ..., 3, : ] )
         
+        # Last 6 currents are symmetrized diagonal elements
+
         threep_tmp[ ..., 1:, : ] = threep[ ..., 4:, : ]
 
         threep = threep_tmp
@@ -914,11 +910,119 @@ def readFF_cpu( threepDir, configList, threep_template, Qsq, \
     return threep
 
     
-def readFF_gpu( threepDir, configList, threep_tokens, \
-                  QsqList, ts, proj, momBoost, particle, \
-                  dataFormat, **kwargs ):
+def readFF_gpu( threepDir, configList, threep_template, \
+                QNum, ts, flavor, formFactor, **kwargs ):
 
-    return
+    if formFactor == "EM":
+
+        insertionType = [ "noether" ]
+                         
+        insertionNum = 4
+
+        symInsertionNum = 4
+
+    elif formFactor == "1D":
+
+        insertionType = [ "oneD/dir_00", \
+                          "oneD/dir_01", \
+                          "oneD/dir_02", \
+                          "oneD/dir_03" ]
+
+        insertionNum = 4
+
+        symInsertionNum = 10
+
+    insertionTypeNum = len( insertionType )
+
+    # threep[ conf, Q, curr, t ]
+
+    threep = np.zeros( ( len( configList ), QNum, symInsertionNum, \
+                         ts + 1 ), dtype=complex )
+
+    # threep_tmp[ conf, t, Q, currT, curr ]
+
+    threep_tmp = np.zeros( ( len( configList ), ts + 1, QNum, \
+                             insertionTypeNum, insertionNum ), \
+                           dtype=complex )
+
+    # Loop over insertion current
+    for c, ic in zip( insertionType, range( insertionTypeNum ) ):
+            
+        # Read three-point files
+    
+        threep_tmp[ ..., ic, : ] = getDatasets( threepDir, \
+                                                configList, \
+                                                threep_template, \
+                                                "tsink_" + str( ts ), \
+                                                str( flavor ), \
+                                                str( c ), \
+                                                "threep" )[ :, 0, ..., 1:5, 0 ]
+
+    # End loop over insertion current
+
+    if formFactor == "1D":
+        
+        # threep_tmp[ conf, t, Q, currT, curr ]
+        # -> threep_tmp[ conf, Q, currT, curr, t ]
+
+        threep_tmp = np.moveaxis( threep_tmp, 1, -1 )
+
+        # i   mu
+        # 0   x
+        # 1   y
+        # 2   z
+        # 3   t
+
+        # [ iD, ig ]: gtDt, gxDx, gyDy, gzDz, 
+        #             gxDt, gyDt, gzDt, 
+        #             gyDx, gzDx, gzDy
+
+        iDerGamma = [ [ 3, 3 ], [ 0, 0 ], [ 1, 1 ], [ 2, 2 ], \
+                  [ 3, 0 ], [ 3, 1], [ 3, 2 ], \
+                  [ 0, 1 ], [ 0, 2 ], [ 1, 2 ] ]
+
+        for ic, iDg in zip( range( symInsertionNum ), iDerGamma ):
+
+            
+            if iDg[ 0 ] == iDg[ 1 ]: # diagonal term
+
+                threep[ :, :, ic, : ] = threep_tmp[ :, :, \
+                                                    iDg[ 0 ], \
+                                                    iDg[ 1 ], : ]
+                    
+            
+            else: # off diagnal
+
+                threep[ :, :, ic, : ] = ( threep_tmp[ :, :, \
+                                                      iDg[ 0 ], \
+                                                      iDg[ 1 ], : ]
+                                          + threep_tmp[ :, :, \
+                                                        iDg[ 1 ], \
+                                                        iDg[ 0 ], : ] ) / 2.0
+            
+        # threep_tmp[ conf, Q, curr, t ]
+
+        threep_tmp = np.zeros( threep.shape[ :2 ] \
+                               + ( threep.shape[ 2 ] - 3, \
+                                   threep.shape[-1] ), \
+                               dtype=complex )
+
+        # 1st current is g0D0 - 1/4( g0D0 + gxDx + gyDy + gzDz )
+
+        threep_tmp[ ..., 0, : ] = threep[ ..., 0, : ] \
+                                  - 0.25 * ( threep[ ..., 0, : ] \
+                                             + threep[ ..., 1, : ] \
+                                             + threep[ ..., 2, : ] \
+                                             + threep[ ..., 3, : ] )
+        
+        # Last 6 currents are symmetrized off-diagonal elements
+
+        threep_tmp[ ..., 1:, : ] = threep[ ..., 4:, : ]
+
+        threep = threep_tmp
+
+    return threep
+
 
 def readFF_ASCII( threepDir, configList, threep_template, \
                     QNum, insertionNum, formFactor, **kwargs ):
@@ -995,13 +1099,13 @@ def readFormFactorThreep( threepDir, configList, threep_tokens, \
 
             elif dataFormat == "gpu":
 
-                    template = "{0}{1:+}{2:+}{3:+}{4}"
-
-                    threep_template = template.format( threep_tokens[0], \
-                                                       momBoost[0], \
-                                                       momBoost[1], \
-                                                       momBoost[2], \
-                                                       threep_tokens[1], **kwargs )
+                threep_template = threep_tokens[0]
+                                                  
+                threep[ iflave ][ ip ] = readFF_gpu( threepDir, configList, \
+                                                     threep_template, \
+                                                     QNum, ts, flav, \
+                                                     formFactor, \
+                                                     **kwargs )
 
             elif dataFormat == "ASCII":
 

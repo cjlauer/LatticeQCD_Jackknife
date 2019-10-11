@@ -83,7 +83,7 @@ if configNum % binNum != 0:
     exit()
 
 binSize = configNum // binNum
-
+"""
 ########################
 # Fit effective masses #
 ########################
@@ -116,7 +116,7 @@ print( "Fit effective mass" )
 mEff_fit_avg = np.average( mEff_fit )
 
 mEff_fit_err = np.std( mEff_fit ) * float( binNum - 1 ) / math.sqrt( float( binNum ) )
-
+"""
 ################
 # Momenta list #
 ################
@@ -131,6 +131,8 @@ QNum = Q.shape[1]
 # Check that momenta agree across configurations
 
 Qsq, Qsq_start, Qsq_end = fncs.processMomList( Q )
+
+Q = Q[0]
 
 #print( Qsq, Qsq_start, Qsq_end )
 
@@ -153,36 +155,69 @@ twop = rw.getDatasets( twopDir, configList, twop_template, "twop" )[ :, 0, 0, ..
 
 print( "Read two-point functions from HDF5 files" )
 
-print(twop.shape)
-
 T = twop.shape[ 1 ]
+
+twop_jk = np.zeros( ( binNum, T, QNum ) )
+
+for q in range( QNum ):
+    """
+    print("Q=({:+},{:+},{:+})".format(Q[q][0],Q[q][1],Q[q][2]))
+
+    print(twop[5,:,q])
+
+    """
+    twop_jk[ ..., q ] = fncs.jackknife( twop[ ..., q ], binSize )
+
+for q in range( Qsq_end[8]+1 ):
+
+    avg = np.average( twop_jk[...,q], axis=0)
+    err = fncs.calcError( twop_jk[...,q], binNum)
+    
+    twop_outFilename = output_template.replace( "*", "twop_Q_{:+}_{:+}_{:+}".format(Q[q][0],Q[q][1],Q[q][2]) )
+    rw.writeAvgDataFile( twop_outFilename, avg, err )
 
 # Average over equal Q^2
 # twop_avg[ Q^2, b, t ]
 
-twop_avg = fncs.averageOverQsq( twop, Qsq_start, Qsq_end )
+twop_avg = fncs.averageOverQsq( twop_jk, Qsq_start, Qsq_end )
+#twop_avg = fncs.averageOverQsq( twop, Qsq_start, Qsq_end )
+"""
+for q in range( QsqNum ):
 
+    print("Q^2={}".format(Qsq[q]))
+
+    print(twop_avg[q,5,:])
+"""
 # Jackknife
 # twop_jk[ b, t, Q ]
 
-#twop_jk = np.zeros( ( binNum, T, QNum ) )
-twop_jk = np.zeros( ( QsqNum, binNum, T ) )
+#twop_jk = np.zeros( ( QsqNum, binNum, T ) )
 
-for q in range( QsqNum ):
+#for q in range( QsqNum ):
 
-    twop_jk[ q, ... ] = fncs.jackknife( twop_avg[ q, ... ], binSize )
+#    twop_jk[ q, ... ] = fncs.jackknife( twop_avg[ q, ... ], binSize )
     
-#for q in range( QNum ):
+#print("AVG")
 
-#    twop_jk[ ..., q ] = fncs.jackknife( twop[ ..., q ], binSize )
+#for q in range( QsqNum ):
 
-#twop_jk = np.moveaxis( twop_jk, -1, 1 )
+#    print(np.average(twop_jk[q,:,:],axis=0))
 
-#twop_avg = np.average( twop_jk, axis=1 )
-#twop_err = fncs.calcError( twop_jk, binNum, axis=1 )
+#print("ERR")
 
-#twop_jk_avg_outFilename = output_template.replace( "*", "twop" )
-#rw.writeAvgFormFactorFile( twop_jk_avg_outFilename, Qsq, twop_avg, twop_err )
+#for q in range( QsqNum ):
+
+#    print(fncs.calcError(twop_jk[q,:,:],binNum))
+
+for q in range( 20 ):
+
+    avg = np.average( twop_avg[q], axis=0)
+    err = fncs.calcError( twop_avg[q], binNum)
+    
+    twop_outFilename = output_template.replace( "*", "twop_Qsq{}".format(Qsq[q]) )
+    rw.writeAvgDataFile( twop_outFilename, avg, err )
+
+exit() # CJL:HERE
 
 for ts in tsink:
     
